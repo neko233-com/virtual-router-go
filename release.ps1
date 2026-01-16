@@ -26,14 +26,6 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Build (all platforms)
-Write-Host "Building release artifacts..." -ForegroundColor Yellow
-& .\一键打包全平台.ps1
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Build failed"
-    exit 1
-}
-
 # Now update version after all checks pass
 # Read current version from version.txt
 $versionFile = "version.txt"
