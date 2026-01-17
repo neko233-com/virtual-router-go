@@ -43,3 +43,6 @@ dist/
 logs/
 *.log
 
+# SSH Deploy
+_ssh/*.local.yaml
+

@@ -1,0 +1,16 @@
+# 部署配置文件示例
+# 请不要在本文件中填写敏感信息，敏感信息请填写在 config_for_ssh_deploy.local.yaml 中
+# config_for_ssh_deploy.local.yaml 的优先级高于本文件
+
+host: "127.0.0.1"
+port: 22
+user: "root"
+password: "" # 建议在 .local.yaml 中配置
+os: "linux"
+arch: "amd64"
+target_dir: "/opt/virtual-router"
+binary_name: "VirtualRouterServer"
+# 构建源码路径 (相对于项目根目录)
+build_path: "./cmd/router-center"
+# 部署后执行的启动命令 (在 target_dir 中执行)
+start_cmd: "nohup ./VirtualRouterServer > server.log 2>&1 &"
