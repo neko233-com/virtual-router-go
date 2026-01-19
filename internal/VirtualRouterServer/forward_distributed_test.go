@@ -5,8 +5,8 @@ import (
 	"sync"
 	"testing"
 
-	"virtual-router-go/internal/config"
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/config"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 func TestForwardToTarget_Distributed(t *testing.T) {

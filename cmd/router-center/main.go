@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"virtual-router-go/VirtualRouterServer"
+	"github.com/neko233-com/virtual-router-go/VirtualRouterServer"
 )
 
 func main() {

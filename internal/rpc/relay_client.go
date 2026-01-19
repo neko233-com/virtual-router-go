@@ -6,7 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 type RelayClient struct {

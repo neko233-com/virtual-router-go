@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	internalClient "virtual-router-go/internal/VirtualRouterClient"
-	"virtual-router-go/internal/rpc"
+	internalClient "github.com/neko233-com/virtual-router-go/internal/VirtualRouterClient"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 type ServiceProvider interface {

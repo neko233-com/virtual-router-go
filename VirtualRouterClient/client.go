@@ -1,7 +1,7 @@
 package VirtualRouterClient
 
 import (
-	internalClient "virtual-router-go/internal/VirtualRouterClient"
+	internalClient "github.com/neko233-com/virtual-router-go/internal/VirtualRouterClient"
 )
 
 type Client struct {

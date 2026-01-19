@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"virtual-router-go/internal/core"
-	"virtual-router-go/internal/rpc"
+	"github.com/neko233-com/virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 type RouteTable struct {

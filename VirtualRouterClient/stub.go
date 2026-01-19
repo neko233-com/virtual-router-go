@@ -3,8 +3,8 @@ package VirtualRouterClient
 import (
 	"encoding/json"
 
-	"virtual-router-go/internal/core"
-	"virtual-router-go/internal/rpc"
+	"github.com/neko233-com/virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 // RegisterRpcStub 注册 RPC Stub（供外部服务实现注册）

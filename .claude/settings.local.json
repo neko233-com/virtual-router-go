@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "*",
+      "Bash(powershell -Command \"Get-ChildItem -Recurse -Filter *.go | ForEach-Object { \\(Get-Content $_FullName\\) -replace ''\"\"virtual-router-go/'', ''\"\"github.com/neko233-com/virtual-router-go/'' | Set-Content $_FullName }\")",
+      "Bash(go tool gofmt:*)",
+      "Bash(gofmt:*)"
+    ]
+  }
+}

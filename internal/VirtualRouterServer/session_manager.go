@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 const sessionTimeout = 30 * time.Second

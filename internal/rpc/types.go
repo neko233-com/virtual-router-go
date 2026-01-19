@@ -2,7 +2,7 @@ package rpc
 
 import (
 	"errors"
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 var (

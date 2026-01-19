@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 func TestStubManagerRegisterInvoke(t *testing.T) {

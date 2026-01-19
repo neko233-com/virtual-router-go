@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 var relayFutureManager = NewFutureManager()

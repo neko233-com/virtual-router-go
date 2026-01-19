@@ -6,8 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/neko233-com/virtual-router-go/internal/core"
 	"strconv"
-	"virtual-router-go/internal/core"
 )
 
 type RpcHandler func(args []json.RawMessage) (any, error)

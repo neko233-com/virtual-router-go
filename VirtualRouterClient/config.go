@@ -1,6 +1,6 @@
 package VirtualRouterClient
 
-import "virtual-router-go/internal/config"
+import "github.com/neko233-com/virtual-router-go/internal/config"
 
 type RouterClientConfig = config.RouterClientConfig
 

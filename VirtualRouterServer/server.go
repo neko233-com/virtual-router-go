@@ -3,8 +3,8 @@ package VirtualRouterServer
 import (
 	"context"
 
-	server "virtual-router-go/internal/VirtualRouterServer"
-	"virtual-router-go/internal/config"
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
+	"github.com/neko233-com/virtual-router-go/internal/config"
 )
 
 type Server = server.Server

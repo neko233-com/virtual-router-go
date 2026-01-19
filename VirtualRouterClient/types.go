@@ -1,8 +1,8 @@
 package VirtualRouterClient
 
 import (
-	"virtual-router-go/internal/core"
-	"virtual-router-go/internal/rpc"
+	"github.com/neko233-com/virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 // 公开类型别名

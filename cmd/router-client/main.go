@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"virtual-router-go/VirtualRouterClient"
+	"github.com/neko233-com/virtual-router-go/VirtualRouterClient"
 )
 
 func main() {

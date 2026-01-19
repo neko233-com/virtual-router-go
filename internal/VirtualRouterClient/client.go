@@ -11,9 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"virtual-router-go/internal/config"
-	"virtual-router-go/internal/core"
-	"virtual-router-go/internal/rpc"
+	"github.com/neko233-com/virtual-router-go/internal/config"
+	"github.com/neko233-com/virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 type Client struct {

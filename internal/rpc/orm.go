@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	"virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 type RpcParamMeta struct {
