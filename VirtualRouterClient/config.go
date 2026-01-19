@@ -7,3 +7,7 @@ type RouterClientConfig = config.RouterClientConfig
 func ReadRouterClientConfig(fileName string) (*config.RouterClientConfig, error) {
 	return config.ReadRouterClientConfig(fileName)
 }
+
+func NewDefaultRouterClientConfig() *config.RouterClientConfig {
+	return config.NewDefaultRouterClientConfig()
+}

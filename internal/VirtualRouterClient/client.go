@@ -34,6 +34,13 @@ func NewClient(configFile string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	return NewClientByConfig(cfg), nil
+}
+
+func NewClientByConfig(cfg *config.RouterClientConfig) *Client {
+	if cfg == nil {
+		return nil
+	}
 	c := &Client{
 		cfg:              cfg,
 		routeId:          cfg.RouteId,
@@ -47,7 +54,7 @@ func NewClient(configFile string) (*Client, error) {
 	RouteTableInstance().SetRouterClient(c)
 
 	log.Printf("RPC 模式: %s", strings.ToUpper(cfg.RpcMode))
-	return c, nil
+	return c
 }
 
 func (c *Client) RouteId() string {

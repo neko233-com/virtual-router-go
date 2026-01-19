@@ -1,6 +1,8 @@
 package VirtualRouterClient
 
 import (
+	"errors"
+
 	internalClient "github.com/neko233-com/virtual-router-go/internal/VirtualRouterClient"
 )
 
@@ -13,6 +15,17 @@ func NewClient(configFile string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	return &Client{inner: c}, nil
+}
+
+func NewClientByConfigObject(cfg *RouterClientConfig) (*Client, error) {
+	if cfg == nil {
+		return nil, errors.New("cfg is nil")
+	}
+	if err := cfg.Check(); err != nil {
+		return nil, err
+	}
+	c := internalClient.NewClientByConfig(cfg)
 	return &Client{inner: c}, nil
 }
 
