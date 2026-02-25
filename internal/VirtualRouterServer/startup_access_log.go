@@ -2,7 +2,7 @@ package VirtualRouterServer
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/netip"
 	"sort"
@@ -17,18 +17,18 @@ type startupHosts struct {
 func logHTTPAccessURLs(serviceName string, port int) {
 	hosts := detectStartupHosts()
 
-	log.Printf("%s 访问链接(本机): %s", serviceName, formatURL("http", "127.0.0.1", port))
+	slog.Info("服务访问地址", "service", serviceName, "scope", "localhost", "url", formatURL("http", "127.0.0.1", port))
 
 	if hosts.lan != "" {
-		log.Printf("%s 访问链接(内网): %s", serviceName, formatURL("http", hosts.lan, port))
+		slog.Info("服务访问地址", "service", serviceName, "scope", "lan", "url", formatURL("http", hosts.lan, port))
 	} else {
-		log.Printf("%s 访问链接(内网): 未检测到内网 IP", serviceName)
+		slog.Warn("服务访问地址未检测到内网 IP", "service", serviceName)
 	}
 
 	if hosts.wan != "" {
-		log.Printf("%s 访问链接(外网): %s", serviceName, formatURL("http", hosts.wan, port))
+		slog.Info("服务访问地址", "service", serviceName, "scope", "wan", "url", formatURL("http", hosts.wan, port))
 	} else {
-		log.Printf("%s 访问链接(外网): 未检测到公网 IP，请使用服务器公网 IP 或端口映射地址", serviceName)
+		slog.Warn("服务访问地址未检测到公网 IP", "service", serviceName, "hint", "请使用服务器公网 IP 或端口映射地址")
 	}
 }
 
@@ -36,15 +36,15 @@ func logTCPAccessAddresses(serviceName string, port int) {
 	hosts := detectStartupHosts()
 
 	if hosts.lan != "" {
-		log.Printf("%s 连接地址(内网): %s", serviceName, formatHostPort(hosts.lan, port))
+		slog.Info("服务连接地址", "service", serviceName, "scope", "lan", "address", formatHostPort(hosts.lan, port))
 	} else {
-		log.Printf("%s 连接地址(内网): 未检测到内网 IP", serviceName)
+		slog.Warn("服务连接地址未检测到内网 IP", "service", serviceName)
 	}
 
 	if hosts.wan != "" {
-		log.Printf("%s 连接地址(外网): %s", serviceName, formatHostPort(hosts.wan, port))
+		slog.Info("服务连接地址", "service", serviceName, "scope", "wan", "address", formatHostPort(hosts.wan, port))
 	} else {
-		log.Printf("%s 连接地址(外网): 未检测到公网 IP，请使用服务器公网 IP 或端口映射地址", serviceName)
+		slog.Warn("服务连接地址未检测到公网 IP", "service", serviceName, "hint", "请使用服务器公网 IP 或端口映射地址")
 	}
 }
 

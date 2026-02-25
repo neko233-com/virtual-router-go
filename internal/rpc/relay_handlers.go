@@ -2,7 +2,7 @@ package rpc
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	"github.com/neko233-com/virtual-router-go/internal/core"
 )
@@ -24,7 +24,7 @@ func HandleRelayRpcRequest(msg *core.RouteMessage, client RouterClientSender) {
 	}
 	var req RpcRequest
 	if err := json.Unmarshal([]byte(*msg.Data), &req); err != nil {
-		log.Printf("RPC 请求解析失败: %v", err)
+		slog.Warn("RPC 请求解析失败", "error", err)
 		return
 	}
 
@@ -46,7 +46,7 @@ func HandleRelayRpcResponse(msg *core.RouteMessage) {
 	}
 	var resp RpcResponse
 	if err := json.Unmarshal([]byte(*msg.Data), &resp); err != nil {
-		log.Printf("RPC 响应解析失败: %v", err)
+		slog.Warn("RPC 响应解析失败", "error", err)
 		return
 	}
 	if resp.ErrorFlag {

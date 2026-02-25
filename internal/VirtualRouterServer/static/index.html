@@ -42,12 +42,21 @@
             <h2>连接与在线路由</h2>
             <div id="onlineChart" class="chart"></div>
           </div>
+          <div class="card chart-card">
+            <h2>RPC 频率排行榜</h2>
+            <div id="rpcRankChart" class="chart"></div>
+          </div>
         </div>
       </section>
 
       <section class="panel" id="tab-rpc">
         <h1>RPC节点列表</h1>
         <div class="card">
+          <div class="row">
+            <label for="routerKeyword">搜索 routerId</label>
+            <input id="routerKeyword" type="text" placeholder="输入关键字过滤路由节点" />
+            <button id="searchRoutersBtn" disabled>查询</button>
+          </div>
           <h2>在线节点</h2>
           <table>
             <thead>
@@ -59,6 +68,22 @@
               </tr>
             </thead>
             <tbody id="routersBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>RPC 频率排行榜</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>排名</th>
+                <th>RouterId</th>
+                <th>每分钟</th>
+                <th>总量</th>
+                <th>入站</th>
+                <th>出站</th>
+              </tr>
+            </thead>
+            <tbody id="rpcRankBody"></tbody>
           </table>
         </div>
         <div class="card">
@@ -96,7 +121,21 @@
           <div class="row">
             <label for="logLimit">条数</label>
             <input id="logLimit" type="number" min="10" max="1000" value="200" />
+            <label for="logKeyword">关键字</label>
+            <input id="logKeyword" type="text" placeholder="可选，支持模糊匹配" />
+            <label for="logLevel">级别</label>
+            <select id="logLevel">
+              <option value="all">全部</option>
+              <option value="info">Info</option>
+              <option value="warn">Warn</option>
+              <option value="error">Error</option>
+            </select>
+            <label class="switch-inline" for="logAutoRefresh">
+              <input id="logAutoRefresh" type="checkbox" checked />
+              自动刷新
+            </label>
             <button id="loadLogsBtn" disabled>刷新日志</button>
+            <button id="exportLogsBtn" disabled>导出 txt</button>
           </div>
           <pre id="logOutput" class="result">暂无日志</pre>
         </div>
@@ -107,6 +146,23 @@
         <div class="card">
           <h2>运行配置</h2>
           <div class="kv-list" id="settingsInfo"></div>
+        </div>
+        <div class="card">
+          <h2>管理员密码</h2>
+          <div class="row">
+            <label for="oldPassword">旧密码</label>
+            <input id="oldPassword" type="password" />
+          </div>
+          <div class="row">
+            <label for="newPassword">新密码</label>
+            <input id="newPassword" type="password" />
+          </div>
+          <div class="row">
+            <label for="confirmPassword">确认新密码</label>
+            <input id="confirmPassword" type="password" />
+            <button id="updatePasswordBtn" disabled>更新密码</button>
+          </div>
+          <p id="settingsMsg" class="msg"></p>
         </div>
       </section>
     </main>

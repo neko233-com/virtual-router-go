@@ -3,9 +3,10 @@ package VirtualRouterServer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,14 +28,33 @@ type Server struct {
 	currentConnections atomic.Int64
 	debugResults       sync.Map
 	shutdownCh         chan struct{}
+
+	rpcStatsMu       sync.RWMutex
+	rpcStatsByRouter map[string]*routerRPCStats
+}
+
+type routerRPCStats struct {
+	RouterID       string
+	IncomingTotal  uint64
+	OutgoingTotal  uint64
+	LastMinuteHits []int64
+}
+
+type RouterRPCSnapshot struct {
+	RouterID      string `json:"routerId"`
+	IncomingTotal uint64 `json:"incomingTotal"`
+	OutgoingTotal uint64 `json:"outgoingTotal"`
+	Total         uint64 `json:"total"`
+	PerMinute     int    `json:"perMinute"`
 }
 
 func NewServer(cfg *config.RouterServerConfig) *Server {
 	return &Server{
-		cfg:            cfg,
-		sessionManager: NewRouterSessionManager(),
-		startTime:      time.Now(),
-		shutdownCh:     make(chan struct{}),
+		cfg:              cfg,
+		sessionManager:   NewRouterSessionManager(),
+		startTime:        time.Now(),
+		shutdownCh:       make(chan struct{}),
+		rpcStatsByRouter: make(map[string]*routerRPCStats),
 	}
 }
 
@@ -44,7 +64,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	s.listener = ln
-	log.Printf("Router Server 启动成功, 端口=%d", s.cfg.RouterServerPort)
+	slog.Info("Router Server 启动成功", "port", s.cfg.RouterServerPort)
 	logTCPAccessAddresses("Router Server", s.cfg.RouterServerPort)
 
 	go func() {
@@ -59,7 +79,7 @@ func (s *Server) Start(ctx context.Context) error {
 			case <-s.shutdownCh:
 				return nil
 			default:
-				log.Printf("accept error: %v", err)
+				slog.Warn("accept error", "error", err)
 				continue
 			}
 		}
@@ -104,12 +124,12 @@ func (s *Server) handleConn(conn net.Conn) {
 
 		msg, err := core.DecodeRouteMessagePayload(payload)
 		if err != nil {
-			log.Printf("decode route message error: %v", err)
+			slog.Warn("decode route message error", "error", err)
 			continue
 		}
 
 		if msg.MessageType == nil {
-			log.Printf("msgType=null remote=%s from=%s to=%s", conn.RemoteAddr().String(), msg.FromRouteId, msg.ToRouteId)
+			slog.Warn("msgType is nil", "remote", conn.RemoteAddr().String(), "from", msg.FromRouteId, "to", msg.ToRouteId)
 			continue
 		}
 
@@ -128,6 +148,7 @@ func (s *Server) handleRouteMessage(msg *core.RouteMessage, conn net.Conn, write
 	case core.RouteMessageTypeMessageData:
 		s.forwardToTarget(msg)
 	case core.RouteMessageTypeRpcRequest:
+		s.recordRouterRPC(msg.FromRouteId, msg.ToRouteId)
 		s.forwardToTarget(msg)
 	case core.RouteMessageTypeRpcResponse:
 		s.handleRpcResponse(msg)
@@ -146,7 +167,7 @@ func (s *Server) handleHeartBeat(msg *core.RouteMessage, conn net.Conn, writeMu 
 	}
 	var rpcInfo core.RpcServerInfo
 	if err := json.Unmarshal([]byte(*msg.Data), &rpcInfo); err != nil {
-		log.Printf("heartbeat parse error: %v", err)
+		slog.Warn("heartbeat parse error", "error", err)
 		return
 	}
 
@@ -188,7 +209,7 @@ func (s *Server) forwardToTarget(msg *core.RouteMessage) {
 	}
 	target := s.sessionManager.GetSession(msg.ToRouteId)
 	if target == nil {
-		log.Printf("route message error! to routeId offline. from=%s to=%s type=%s", msg.FromRouteId, msg.ToRouteId, msg.MessageType.String())
+		slog.Warn("route message target offline", "from", msg.FromRouteId, "to", msg.ToRouteId, "type", msg.MessageType.String())
 		return
 	}
 	_ = target.WriteRouteMessage(msg)
@@ -227,6 +248,100 @@ func (s *Server) SessionManager() *RouterSessionManager {
 
 func (s *Server) Stats() (totalConn uint64, currentConn int64, totalBytes uint64, totalRequests uint64, uptimeMs int64) {
 	return s.totalConnections.Load(), s.currentConnections.Load(), s.totalBytes.Load(), s.totalRequests.Load(), time.Since(s.startTime).Milliseconds()
+}
+
+func (s *Server) RouterRPCStats(keyword string, limit int) []RouterRPCSnapshot {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	now := time.Now().UnixMilli()
+	lowerKeyword := strings.ToLower(strings.TrimSpace(keyword))
+
+	s.rpcStatsMu.Lock()
+	defer s.rpcStatsMu.Unlock()
+
+	result := make([]RouterRPCSnapshot, 0, len(s.rpcStatsByRouter))
+	for _, item := range s.rpcStatsByRouter {
+		if lowerKeyword != "" && !strings.Contains(strings.ToLower(item.RouterID), lowerKeyword) {
+			continue
+		}
+
+		item.LastMinuteHits = pruneLastMinute(item.LastMinuteHits, now)
+		snapshot := RouterRPCSnapshot{
+			RouterID:      item.RouterID,
+			IncomingTotal: item.IncomingTotal,
+			OutgoingTotal: item.OutgoingTotal,
+			Total:         item.IncomingTotal + item.OutgoingTotal,
+			PerMinute:     len(item.LastMinuteHits),
+		}
+		result = append(result, snapshot)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].PerMinute == result[j].PerMinute {
+			if result[i].Total == result[j].Total {
+				return result[i].RouterID < result[j].RouterID
+			}
+			return result[i].Total > result[j].Total
+		}
+		return result[i].PerMinute > result[j].PerMinute
+	})
+
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result
+}
+
+func (s *Server) recordRouterRPC(fromRouteID, toRouteID string) {
+	now := time.Now().UnixMilli()
+
+	s.rpcStatsMu.Lock()
+	defer s.rpcStatsMu.Unlock()
+
+	if fromRouteID != "" {
+		outgoing := s.ensureRouterRPCStats(fromRouteID)
+		outgoing.OutgoingTotal++
+		outgoing.LastMinuteHits = append(outgoing.LastMinuteHits, now)
+		outgoing.LastMinuteHits = pruneLastMinute(outgoing.LastMinuteHits, now)
+	}
+	if toRouteID != "" {
+		incoming := s.ensureRouterRPCStats(toRouteID)
+		incoming.IncomingTotal++
+		incoming.LastMinuteHits = append(incoming.LastMinuteHits, now)
+		incoming.LastMinuteHits = pruneLastMinute(incoming.LastMinuteHits, now)
+	}
+}
+
+func (s *Server) ensureRouterRPCStats(routerID string) *routerRPCStats {
+	if item, ok := s.rpcStatsByRouter[routerID]; ok {
+		return item
+	}
+	item := &routerRPCStats{RouterID: routerID, LastMinuteHits: make([]int64, 0, 32)}
+	s.rpcStatsByRouter[routerID] = item
+	return item
+}
+
+func pruneLastMinute(list []int64, nowMs int64) []int64 {
+	if len(list) == 0 {
+		return list
+	}
+	cutoff := nowMs - 60*1000
+	idx := 0
+	for idx < len(list) && list[idx] < cutoff {
+		idx++
+	}
+	if idx == 0 {
+		return list
+	}
+	if idx >= len(list) {
+		return list[:0]
+	}
+	return list[idx:]
 }
 
 var rpcUidRegex = regexp.MustCompile(`"rpcUid"\s*:\s*"([^"]+)"`)

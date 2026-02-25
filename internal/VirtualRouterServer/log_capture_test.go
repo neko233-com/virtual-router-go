@@ -1,6 +1,8 @@
 package VirtualRouterServer
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -32,5 +34,41 @@ func TestLogCapture_WriteAndGetRecent(t *testing.T) {
 	}
 	if !strings.HasSuffix(lastTwo[0], "line-c") || !strings.HasSuffix(lastTwo[1], "line-d") {
 		t.Fatalf("unexpected last two lines: %#v", lastTwo)
+	}
+}
+
+func TestRotatingFileWriter_RotatesFiles(t *testing.T) {
+	dir := t.TempDir()
+	w, err := newRotatingFileWriter(logRotationConfig{
+		Dir:      dir,
+		BaseName: "test.log",
+		MaxBytes: 30,
+		MaxFiles: 3,
+	})
+	if err != nil {
+		t.Fatalf("new rotating writer error: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = w.Close()
+	})
+
+	for i := 0; i < 10; i++ {
+		_, err = w.Write([]byte("line-0123456789\n"))
+		if err != nil {
+			t.Fatalf("write error: %v", err)
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "test.log")); err != nil {
+		t.Fatalf("expected current log file exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "test.log.1")); err != nil {
+		t.Fatalf("expected rotated log .1 exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "test.log.2")); err != nil {
+		t.Fatalf("expected rotated log .2 exists: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "test.log.3")); err == nil {
+		t.Fatalf("expected .3 not exists because maxFiles=3")
 	}
 }

@@ -140,3 +140,10 @@ func writeDefault(fileName string, cfg any) error {
 	}
 	return os.WriteFile(fileName, b, 0644)
 }
+
+func WriteRouterServerConfig(fileName string, cfg *RouterServerConfig) error {
+	if fileName == "" {
+		fileName = RouterServerConfigName
+	}
+	return writeDefault(fileName, cfg)
+}

@@ -2,7 +2,7 @@ package VirtualRouterServer
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -83,7 +83,7 @@ func (m *RouterSessionManager) RemoveSessions(routeIds []string) {
 		removed = append(removed, routeId)
 		session.MarkClosed()
 		_ = session.Conn.Close()
-		log.Printf("client 的 routeSession 被移除了! routeId=%s remote=%s", routeId, session.RemoteAddrStr())
+		slog.Info("client 的 routeSession 被移除了", "routeId", routeId, "remote", session.RemoteAddrStr())
 	}
 	m.mu.Unlock()
 

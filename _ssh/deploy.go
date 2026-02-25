@@ -2,8 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,20 +28,23 @@ type Config struct {
 func main() {
 	config, err := loadConfig()
 	if err != nil {
-		log.Fatalf("加载配置失败: %v", err)
+		slog.Error("加载配置失败", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("开始构建 %s (%s/%s)...\n", config.BinaryName, config.OS, config.Arch)
 	localPath, err := buildBinary(config)
 	if err != nil {
-		log.Fatalf("构建失败: %v", err)
+		slog.Error("构建失败", "error", err)
+		os.Exit(1)
 	}
 	defer os.Remove(localPath)
 
 	fmt.Printf("连接到服务器 %s:%d...\n", config.Host, config.Port)
 	client, err := dialSSH(config)
 	if err != nil {
-		log.Fatalf("SSH连接失败: %v", err)
+		slog.Error("SSH连接失败", "error", err)
+		os.Exit(1)
 	}
 	defer client.Close()
 
@@ -52,13 +54,15 @@ func main() {
 	fmt.Printf("上传二进制文件到 %s...\n", config.TargetDir)
 	err = uploadFile(client, localPath, config.TargetDir, config.BinaryName)
 	if err != nil {
-		log.Fatalf("上传失败: %v", err)
+		slog.Error("上传失败", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("正在启动服务...")
 	err = runRemote(client, fmt.Sprintf("cd %s && chmod +x ./%s && %s", config.TargetDir, config.BinaryName, config.StartCmd))
 	if err != nil {
-		log.Fatalf("启动失败: %v", err)
+		slog.Error("启动失败", "error", err)
+		os.Exit(1)
 	}
 
 	fmt.Println("部署成功！")

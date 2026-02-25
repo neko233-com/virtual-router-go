@@ -12,6 +12,7 @@ const state = {
     request: null,
     memory: null,
     online: null,
+    rpcRank: null,
   },
 };
 
@@ -23,10 +24,22 @@ const tabs = document.getElementById("tabs");
 
 const stats = document.getElementById("stats");
 const routersBody = document.getElementById("routersBody");
+const rpcRankBody = document.getElementById("rpcRankBody");
 const settingsInfo = document.getElementById("settingsInfo");
+const routerKeywordInput = document.getElementById("routerKeyword");
+const searchRoutersBtn = document.getElementById("searchRoutersBtn");
 const logLimitInput = document.getElementById("logLimit");
+const logKeywordInput = document.getElementById("logKeyword");
+const logLevelInput = document.getElementById("logLevel");
+const logAutoRefreshInput = document.getElementById("logAutoRefresh");
 const loadLogsBtn = document.getElementById("loadLogsBtn");
+const exportLogsBtn = document.getElementById("exportLogsBtn");
 const logOutput = document.getElementById("logOutput");
+const oldPasswordInput = document.getElementById("oldPassword");
+const newPasswordInput = document.getElementById("newPassword");
+const confirmPasswordInput = document.getElementById("confirmPassword");
+const updatePasswordBtn = document.getElementById("updatePasswordBtn");
+const settingsMsg = document.getElementById("settingsMsg");
 
 const targetRouteIdInput = document.getElementById("targetRouteId");
 const packetIdInput = document.getElementById("packetId");
@@ -38,13 +51,16 @@ const rpcMsg = document.getElementById("rpcMsg");
 const rpcResult = document.getElementById("rpcResult");
 
 loginBtn.addEventListener("click", login);
-refreshBtn.addEventListener("click", loadAll);
+refreshBtn.addEventListener("click", () => loadAll());
 tabs.addEventListener("click", onTabClick);
-loadLogsBtn.addEventListener("click", loadLogs);
+loadLogsBtn.addEventListener("click", () => loadLogs());
+exportLogsBtn.addEventListener("click", exportLogs);
+searchRoutersBtn.addEventListener("click", () => loadRoutersAndRanking());
 
 loadStubsBtn.addEventListener("click", loadStubs);
 sendRpcBtn.addEventListener("click", sendRpc);
 stubSelect.addEventListener("change", onStubChange);
+updatePasswordBtn.addEventListener("click", updateAdminPassword);
 
 window.addEventListener("resize", resizeCharts);
 
@@ -70,6 +86,9 @@ async function login() {
     sendRpcBtn.disabled = false;
     stubSelect.disabled = false;
     loadLogsBtn.disabled = false;
+    exportLogsBtn.disabled = false;
+    updatePasswordBtn.disabled = false;
+    searchRoutersBtn.disabled = false;
 
     setMessage("登录成功");
     await loadAll();
@@ -88,7 +107,7 @@ function startAutoRefresh() {
       return;
     }
     await loadAll(true);
-    if (state.activeTab === "logs") {
+    if (state.activeTab === "logs" && logAutoRefreshInput.checked) {
       await loadLogs();
     }
   }, 5000);
@@ -131,14 +150,16 @@ async function loadAll(isSilent = false) {
   }
 
   try {
-    const [statusRes, metricsRes, connRes, routersRes, monitorRes, viewersRes, rpcStatsRes] = await Promise.all([
+    const [statusRes, metricsRes, connRes, routersRes, monitorRes, viewersRes, rpcStatsRes, rpcRankRes, systemSettingsRes] = await Promise.all([
       apiGet("/api/status"),
       apiGet("/api/metrics"),
       apiGet("/api/connections"),
-      apiGet("/api/routers"),
+      apiGet(`/api/routers?keyword=${encodeURIComponent((routerKeywordInput.value || "").trim())}`),
       apiGet("/api/monitor-stats"),
       apiGet("/api/viewers"),
       apiGet("/api/rpc-stats"),
+      apiGet(`/api/rpc/router-ranking?limit=20&keyword=${encodeURIComponent((routerKeywordInput.value || "").trim())}`),
+      apiGet("/api/system/settings"),
     ]);
 
     const serverInfo = statusRes.data?.serverInfo || {};
@@ -150,6 +171,8 @@ async function loadAll(isSilent = false) {
     const monitor = monitorRes.data || {};
     const viewers = viewersRes.data || {};
     const rpcTotal = rpcStatsRes.data?.total || {};
+    const rpcRanking = rpcRankRes.data?.list || [];
+    const systemSettings = systemSettingsRes.data || {};
     const routersData = routersRes.data || {};
     const routers = routersData.routers || routersData.list || [];
 
@@ -162,6 +185,8 @@ async function loadAll(isSilent = false) {
       ["累计字节", rpcTotal.bytes || 0],
     ]);
     renderRouters(routers);
+    renderRPCRankTable(rpcRanking);
+    renderRPCRankChart(rpcRanking);
     syncRouteOptions(routers);
     renderSettings({
       osName: systemInfo.osName || "-",
@@ -172,6 +197,8 @@ async function loadAll(isSilent = false) {
       memoryUsed: memory.used || 0,
       memoryMax: memory.max || 0,
       requestsLastMinute: monitor.requestsLastMinute || 0,
+      adminPasswordConfigured: systemSettings.adminPasswordConfigured ? "是" : "否",
+      logBufferCapacity: systemSettings.logBufferCapacity || 0,
     });
 
     updateHistory({
@@ -191,18 +218,71 @@ async function loadAll(isSilent = false) {
   }
 }
 
+async function loadRoutersAndRanking() {
+  if (!state.token) {
+    return;
+  }
+  await loadAll(true);
+}
+
 async function loadLogs() {
   if (!state.token) {
     return;
   }
   const limit = Math.min(1000, Math.max(10, Number(logLimitInput.value || 200)));
+  const keyword = (logKeywordInput.value || "").trim();
+  const level = (logLevelInput.value || "all").trim();
   try {
-    const data = await apiGet(`/api/logs?limit=${limit}`);
+    const data = await apiGet(`/api/logs?limit=${limit}&keyword=${encodeURIComponent(keyword)}&level=${encodeURIComponent(level)}`);
     const lines = data?.data?.lines || [];
     logOutput.textContent = lines.length ? lines.join("\n") : "暂无日志";
   } catch (error) {
     logOutput.textContent = `日志加载失败: ${error.message || error}`;
   }
+}
+
+async function exportLogs() {
+  if (!state.token) {
+    return;
+  }
+  const limit = Math.min(5000, Math.max(10, Number(logLimitInput.value || 200)));
+  const keyword = (logKeywordInput.value || "").trim();
+  const level = (logLevelInput.value || "all").trim();
+  const url = `/api/logs/export?limit=${limit}&keyword=${encodeURIComponent(keyword)}&level=${encodeURIComponent(level)}`;
+
+  try {
+    const resp = await fetch(url, {
+      headers: { Authorization: `Bearer ${state.token}` },
+    });
+    if (!resp.ok) {
+      throw new Error(`导出失败: HTTP ${resp.status}`);
+    }
+
+    const blob = await resp.blob();
+    const fileName = parseFileName(resp.headers.get("Content-Disposition")) || "router-logs.txt";
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(objectUrl);
+  } catch (error) {
+    logOutput.textContent = `导出失败: ${error.message || error}`;
+  }
+}
+
+function parseFileName(contentDisposition) {
+  if (!contentDisposition) {
+    return "";
+  }
+  const marker = "filename=";
+  const idx = contentDisposition.toLowerCase().indexOf(marker);
+  if (idx < 0) {
+    return "";
+  }
+  return contentDisposition.substring(idx + marker.length).trim().replaceAll('"', "");
 }
 
 async function apiGet(path) {
@@ -248,6 +328,8 @@ function renderSettings(info) {
     ["内存已用", info.memoryUsed],
     ["内存总量", info.memoryMax],
     ["最近一分钟请求", info.requestsLastMinute],
+    ["管理员密码已配置", info.adminPasswordConfigured],
+    ["日志缓冲区容量", info.logBufferCapacity],
   ];
   settingsInfo.innerHTML = pairs
     .map(([k, v]) => `<div class="kv-k">${escapeHtml(String(k))}</div><div class="kv-v">${escapeHtml(String(v))}</div>`)
@@ -268,6 +350,45 @@ function renderRouters(list) {
       return `<tr><td>${escapeHtml(routeId)}</td><td>${escapeHtml(mode)}</td><td>${escapeHtml(addr)}</td><td>${escapeHtml(status)}</td></tr>`;
     })
     .join("");
+}
+
+function renderRPCRankTable(list) {
+  if (!list.length) {
+    rpcRankBody.innerHTML = `<tr><td colspan="6">暂无 RPC 统计数据</td></tr>`;
+    return;
+  }
+  rpcRankBody.innerHTML = list
+    .map((item, idx) => {
+      return `<tr>
+        <td>${idx + 1}</td>
+        <td>${escapeHtml(item.routerId || "-")}</td>
+        <td>${escapeHtml(String(item.perMinute || 0))}</td>
+        <td>${escapeHtml(String(item.total || 0))}</td>
+        <td>${escapeHtml(String(item.incomingTotal || 0))}</td>
+        <td>${escapeHtml(String(item.outgoingTotal || 0))}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderRPCRankChart(list) {
+  if (!state.charts.rpcRank) {
+    return;
+  }
+  const labels = list.slice(0, 10).map((item) => item.routerId || "-");
+  const values = list.slice(0, 10).map((item) => Number(item.perMinute || 0));
+  state.charts.rpcRank.setOption({
+    tooltip: { trigger: "axis" },
+    xAxis: { type: "category", data: labels, axisLabel: { rotate: 25 } },
+    yAxis: { type: "value" },
+    series: [
+      {
+        type: "bar",
+        name: "每分钟 RPC",
+        data: values,
+      },
+    ],
+  });
 }
 
 function syncRouteOptions(routers) {
@@ -402,6 +523,7 @@ function initCharts() {
   state.charts.request = echarts.init(document.getElementById("requestChart"));
   state.charts.memory = echarts.init(document.getElementById("memoryChart"));
   state.charts.online = echarts.init(document.getElementById("onlineChart"));
+  state.charts.rpcRank = echarts.init(document.getElementById("rpcRankChart"));
 }
 
 function refreshCharts() {
@@ -472,6 +594,9 @@ function resizeCharts() {
   if (state.charts.online) {
     state.charts.online.resize();
   }
+  if (state.charts.rpcRank) {
+    state.charts.rpcRank.resize();
+  }
 }
 
 function sleep(ms) {
@@ -484,6 +609,43 @@ function setMessage(message) {
 
 function setRpcMessage(message) {
   rpcMsg.textContent = message;
+}
+
+async function updateAdminPassword() {
+  const oldPassword = oldPasswordInput.value || "";
+  const newPassword = (newPasswordInput.value || "").trim();
+  const confirmPassword = (confirmPasswordInput.value || "").trim();
+
+  if (!oldPassword) {
+    setSettingsMessage("旧密码不能为空");
+    return;
+  }
+  if (newPassword.length < 4) {
+    setSettingsMessage("新密码长度至少 4 位");
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    setSettingsMessage("两次新密码不一致");
+    return;
+  }
+
+  setSettingsMessage("更新中...");
+  try {
+    const resp = await apiPost("/api/system/admin-password", {
+      oldPassword,
+      newPassword,
+    });
+    setSettingsMessage(resp.message || "密码更新成功");
+    oldPasswordInput.value = "";
+    newPasswordInput.value = "";
+    confirmPasswordInput.value = "";
+  } catch (error) {
+    setSettingsMessage(`更新失败: ${error.message || error}`);
+  }
+}
+
+function setSettingsMessage(message) {
+  settingsMsg.textContent = message;
 }
 
 function pad2(v) {

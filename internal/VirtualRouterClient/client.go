@@ -3,7 +3,7 @@ package VirtualRouterClient
 import (
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -53,7 +53,7 @@ func NewClientByConfig(cfg *config.RouterClientConfig) *Client {
 	RouteTableInstance().SetRpcMode(cfg.RpcMode)
 	RouteTableInstance().SetRouterClient(c)
 
-	log.Printf("RPC 模式: %s", strings.ToUpper(cfg.RpcMode))
+	slog.Info("RPC 模式", "mode", strings.ToUpper(cfg.RpcMode))
 	return c
 }
 
@@ -75,23 +75,23 @@ func (c *Client) Start() error {
 
 func (c *Client) runRpcServer() {
 	if strings.EqualFold(c.cfg.RpcMode, "direct") {
-		log.Printf("RPC 模式: DIRECT - 启动本地 RPC 服务器 port=%d", c.cfg.LocalRpcPort)
+		slog.Info("RPC 模式: DIRECT，启动本地 RPC 服务器", "port", c.cfg.LocalRpcPort)
 		server := rpc.NewStubServer(c.cfg.LocalRpcPort)
 		go server.Start()
 	} else {
-		log.Printf("RPC 模式: RELAY - RPC 调用将通过 Router Center 转发")
+		slog.Info("RPC 模式: RELAY，RPC 调用将通过 Router Center 转发")
 	}
 }
 
 func (c *Client) runRouterClient() {
 	if c.tryConnect() {
-		log.Printf("✅ 连接 Router Center 成功! %s:%d, current routeId = %s", c.routerCenterHost, c.routerCenterPort, c.routeId)
+		slog.Info("连接 Router Center 成功", "host", c.routerCenterHost, "port", c.routerCenterPort, "routeId", c.routeId)
 		c.isOpen.Store(true)
 		c.startHeartbeat()
 		go c.readLoop()
 		return
 	}
-	log.Printf("❌ 首次连接 Router Center 失败! %s:%d, 将在后台自动重连...", c.routerCenterHost, c.routerCenterPort)
+	slog.Warn("首次连接 Router Center 失败，将在后台自动重连", "host", c.routerCenterHost, "port", c.routerCenterPort)
 	c.startBackgroundReconnect()
 }
 
@@ -119,7 +119,7 @@ func (c *Client) startHeartbeat() {
 			}
 			if ok := c.sendHeartbeat(); !ok {
 				c.isOpen.Store(false)
-				log.Printf("Router Center 离线! host=%s port=%d", c.routerCenterHost, c.routerCenterPort)
+				slog.Warn("Router Center 离线", "host", c.routerCenterHost, "port", c.routerCenterPort)
 				c.startBackgroundReconnect()
 				return
 			}
@@ -180,7 +180,7 @@ func (c *Client) handleMessage(msg *core.RouteMessage) {
 	case core.RouteMessageTypeRemoveRouteNode:
 		c.handleRemoveOffline(msg)
 	case core.RouteMessageTypeMessageData:
-		log.Printf("收到 data = %s", safeData(msg))
+		slog.Info("收到 message data", "data", safeData(msg))
 	case core.RouteMessageTypeRpcRequest:
 		rpc.HandleRelayRpcRequest(msg, c)
 	case core.RouteMessageTypeRpcResponse:
@@ -196,7 +196,7 @@ func (c *Client) handleRegister(msg *core.RouteMessage) {
 	}
 	var nodes []core.RouteNode
 	if err := json.Unmarshal([]byte(*msg.Data), &nodes); err != nil {
-		log.Printf("init route info error: %v", err)
+		slog.Warn("init route info error", "error", err)
 		return
 	}
 	RouteTableInstance().UpsertRouteNode(nodes)
@@ -208,14 +208,14 @@ func (c *Client) handleRemoveOffline(msg *core.RouteMessage) {
 	}
 	var ids []string
 	if err := json.Unmarshal([]byte(*msg.Data), &ids); err != nil {
-		log.Printf("remove offline parse error: %v", err)
+		slog.Warn("remove offline parse error", "error", err)
 		return
 	}
 	if len(ids) == 0 {
 		return
 	}
 	RouteTableInstance().RemoveRouteNode(ids)
-	log.Printf("[Client] 删除已离线的 Route Client. toRemoteRouteIdList = %v", ids)
+	slog.Info("删除已离线的 Route Client", "routeIds", ids)
 }
 
 func (c *Client) handleSystemError(msg *core.RouteMessage) {
@@ -223,13 +223,9 @@ func (c *Client) handleSystemError(msg *core.RouteMessage) {
 		return
 	}
 	errMsg := *msg.Data
-	log.Printf("❌ 收到系统错误: %s", errMsg)
+	slog.Error("收到系统错误", "errorMessage", errMsg)
 	if strings.Contains(errMsg, "RouterId") && strings.Contains(errMsg, "已经存在") {
-		log.Printf("==================================================")
-		log.Printf("   FATAL ERROR: RouterId 冲突")
-		log.Printf("   %s", errMsg)
-		log.Printf("   请修改配置文件中的 routeId，然后重启程序。")
-		log.Printf("==================================================")
+		slog.Error("FATAL ERROR: RouterId 冲突", "detail", errMsg, "hint", "请修改配置文件中的 routeId，然后重启程序")
 		panic(errMsg)
 	}
 }
@@ -315,7 +311,7 @@ func (c *Client) AwaitRpcRouterInfoFirstReady() error {
 			return errors.New("10s 还是没有收到 router-server 返回任何注册信息, 请检查你的配置")
 		}
 	}
-	log.Printf("等待 router-server 返回 rpc 信息总共等了 %d ms", time.Since(start).Milliseconds())
+	slog.Info("等待 router-server 返回 rpc 信息完成", "costMs", time.Since(start).Milliseconds())
 	return nil
 }
 

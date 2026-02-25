@@ -3,7 +3,7 @@ package VirtualRouterServer
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -37,10 +37,14 @@ func (h *HttpServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/routers", h.withAuth(h.handleRouters))
 	mux.HandleFunc("/api/connections", h.withAuth(h.handleConnections))
 	mux.HandleFunc("/api/rpc-stats", h.withAuth(h.handleRpcStats))
+	mux.HandleFunc("/api/rpc/router-ranking", h.withAuth(h.handleRouterRPCRanking))
 	mux.HandleFunc("/api/message-stats", h.withAuth(h.handleMessageStats))
 	mux.HandleFunc("/api/monitor-stats", h.withAuth(h.handleMonitorStats))
 	mux.HandleFunc("/api/viewers", h.withAuth(h.handleViewers))
 	mux.HandleFunc("/api/logs", h.withAuth(h.handleLogs))
+	mux.HandleFunc("/api/logs/export", h.withAuth(h.handleLogsExport))
+	mux.HandleFunc("/api/system/settings", h.withAuth(h.handleSystemSettings))
+	mux.HandleFunc("/api/system/admin-password", h.withAuth(h.handleUpdateAdminPassword))
 
 	mux.HandleFunc("/api/debug/validate-route-id", h.withAuth(h.handleValidateRouteId))
 	mux.HandleFunc("/api/debug/available-routes", h.withAuth(h.handleAvailableRoutes))
@@ -60,7 +64,7 @@ func (h *HttpServer) Start(ctx context.Context) error {
 		_ = h.http.Shutdown(context.Background())
 	}()
 
-	log.Printf("HTTP Monitor 启动成功, 端口=%d", h.cfg.HTTPMonitorPort)
+	slog.Info("HTTP Monitor 启动成功", "port", h.cfg.HTTPMonitorPort)
 	logHTTPAccessURLs("HTTP Monitor", h.cfg.HTTPMonitorPort)
 	return h.http.ListenAndServe()
 }
@@ -209,9 +213,13 @@ func (h *HttpServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpServer) handleRouters(w http.ResponseWriter, r *http.Request) {
 	nodes := h.srv.SessionManager().GetAllRouteNodeList()
+	keyword := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("keyword")))
 	currentTime := time.Now().UnixMilli()
 	routers := make([]any, 0, len(nodes))
 	for _, n := range nodes {
+		if keyword != "" && !strings.Contains(strings.ToLower(n.RouterId), keyword) {
+			continue
+		}
 		isRelay := n.HostForRpc == "" || n.PortForRpc == 0
 		rpcMode := "direct"
 		address := n.HostForRpc + ":" + intToString(n.PortForRpc)
@@ -239,6 +247,30 @@ func (h *HttpServer) handleRouters(w http.ResponseWriter, r *http.Request) {
 			"total":   len(routers),
 			"online":  len(routers),
 			"offline": 0,
+		},
+	})
+}
+
+func (h *HttpServer) handleRouterRPCRanking(w http.ResponseWriter, r *http.Request) {
+	limit := 20
+	if value := strings.TrimSpace(r.URL.Query().Get("limit")); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			if parsed > 500 {
+				parsed = 500
+			}
+			limit = parsed
+		}
+	}
+	keyword := strings.TrimSpace(r.URL.Query().Get("keyword"))
+	list := h.srv.RouterRPCStats(keyword, limit)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"list":    list,
+			"total":   len(list),
+			"keyword": keyword,
+			"limit":   limit,
 		},
 	})
 }
@@ -309,6 +341,8 @@ func (h *HttpServer) handleViewers(w http.ResponseWriter, r *http.Request) {
 
 func (h *HttpServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 	limit := 200
+	keyword := strings.TrimSpace(r.URL.Query().Get("keyword"))
+	level := normalizeLogLevel(r.URL.Query().Get("level"))
 	if value := r.URL.Query().Get("limit"); value != "" {
 		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
 			if parsed > 1000 {
@@ -318,13 +352,151 @@ func (h *HttpServer) handleLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	lines := GetRecentProcessLogs(limit)
+	lines := GetRecentProcessLogs(1000)
+	if keyword != "" {
+		filtered := make([]string, 0, len(lines))
+		lowerKeyword := strings.ToLower(keyword)
+		for _, line := range lines {
+			if strings.Contains(strings.ToLower(line), lowerKeyword) {
+				filtered = append(filtered, line)
+			}
+		}
+		lines = filtered
+	}
+	if level != "all" {
+		filtered := make([]string, 0, len(lines))
+		for _, line := range lines {
+			if matchLogLevel(line, level) {
+				filtered = append(filtered, line)
+			}
+		}
+		lines = filtered
+	}
+	if len(lines) > limit {
+		lines = lines[len(lines)-limit:]
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
-			"lines": lines,
-			"count": len(lines),
+			"lines":   lines,
+			"count":   len(lines),
+			"keyword": keyword,
+			"level":   level,
 		},
+	})
+}
+
+func (h *HttpServer) handleLogsExport(w http.ResponseWriter, r *http.Request) {
+	limit := 1000
+	keyword := strings.TrimSpace(r.URL.Query().Get("keyword"))
+	level := normalizeLogLevel(r.URL.Query().Get("level"))
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			if parsed > 5000 {
+				parsed = 5000
+			}
+			limit = parsed
+		}
+	}
+
+	lines := GetRecentProcessLogs(limit)
+	if keyword != "" {
+		filtered := make([]string, 0, len(lines))
+		lowerKeyword := strings.ToLower(keyword)
+		for _, line := range lines {
+			if strings.Contains(strings.ToLower(line), lowerKeyword) {
+				filtered = append(filtered, line)
+			}
+		}
+		lines = filtered
+	}
+	if level != "all" {
+		filtered := make([]string, 0, len(lines))
+		for _, line := range lines {
+			if matchLogLevel(line, level) {
+				filtered = append(filtered, line)
+			}
+		}
+		lines = filtered
+	}
+
+	fileName := "router-logs-" + time.Now().Format("20060102-150405") + ".txt"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", "attachment; filename=\""+fileName+"\"")
+	_, _ = w.Write([]byte(strings.Join(lines, "\n")))
+}
+
+func normalizeLogLevel(raw string) string {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	switch v {
+	case "info", "warn", "error", "all":
+		return v
+	default:
+		return "all"
+	}
+}
+
+func matchLogLevel(line, level string) bool {
+	lower := strings.ToLower(line)
+	switch level {
+	case "error":
+		return strings.Contains(lower, "error") || strings.Contains(lower, "fatal")
+	case "warn":
+		return strings.Contains(lower, "warn")
+	case "info":
+		if strings.Contains(lower, "error") || strings.Contains(lower, "fatal") || strings.Contains(lower, "warn") {
+			return false
+		}
+		return true
+	default:
+		return true
+	}
+}
+
+func (h *HttpServer) handleSystemSettings(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"routerServerPort":        h.cfg.RouterServerPort,
+			"httpMonitorPort":         h.cfg.HTTPMonitorPort,
+			"adminPasswordConfigured": strings.TrimSpace(h.cfg.AdminPassword) != "",
+			"logBufferCapacity":       800,
+		},
+	})
+}
+
+func (h *HttpServer) handleUpdateAdminPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"success": false, "message": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"oldPassword"`
+		NewPassword string `json:"newPassword"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "请求格式错误"})
+		return
+	}
+	if req.OldPassword != h.cfg.AdminPassword {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "旧密码不正确"})
+		return
+	}
+	if len(strings.TrimSpace(req.NewPassword)) < 4 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "message": "新密码长度至少 4 位"})
+		return
+	}
+
+	h.cfg.AdminPassword = strings.TrimSpace(req.NewPassword)
+	if err := config.WriteRouterServerConfig("", h.cfg); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"success": false, "message": "更新成功但写入配置失败: " + err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "管理员密码已更新并写入配置文件",
 	})
 }
 

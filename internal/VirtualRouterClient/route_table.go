@@ -1,7 +1,7 @@
 package VirtualRouterClient
 
 import (
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -63,7 +63,7 @@ func (t *RouteTable) UpsertRouteNode(nodes []core.RouteNode) {
 		if ok {
 			// 连接信息变更，清理旧连接
 			delete(t.routeIdToRpcClient, node.RouterId)
-			log.Printf("因为 routeId=%s 的连接信息变更, 关闭历史连接", node.RouterId)
+			slog.Info("路由连接信息变更，关闭历史连接", "routeId", node.RouterId)
 		}
 		t.routeIdToNodeMap[node.RouterId] = node
 	}

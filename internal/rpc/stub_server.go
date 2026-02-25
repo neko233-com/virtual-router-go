@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 )
@@ -22,7 +22,7 @@ func (s *StubServer) Start() error {
 	if err != nil {
 		return err
 	}
-	log.Printf("RPC Server - 启动成功! port=%d", s.port)
+	slog.Info("RPC Server 启动成功", "port", s.port)
 	for {
 		conn, err := ln.Accept()
 		if err != nil {

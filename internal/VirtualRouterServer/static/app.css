@@ -223,3 +223,21 @@ td {
 .kv-v {
   font-weight: 600;
 }
+
+.switch-inline {
+  min-width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.switch-inline input[type="checkbox"] {
+  min-width: auto;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+}
+
+#settingsMsg {
+  color: #374151;
+}

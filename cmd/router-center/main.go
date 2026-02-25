@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,7 +15,8 @@ func main() {
 
 	cfg, err := VirtualRouterServer.ReadRouterServerConfig("")
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("读取服务端配置失败", "error", err)
+		os.Exit(1)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -26,13 +27,14 @@ func main() {
 
 	go func() {
 		if err := srv.Start(ctx); err != nil {
-			log.Fatalf("router server start error: %v", err)
+			slog.Error("router server start error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	go func() {
 		if err := httpSrv.Start(ctx); err != nil {
-			log.Printf("http server stop: %v", err)
+			slog.Warn("http server stop", "error", err)
 		}
 	}()
 

@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"sync"
 	"time"
@@ -26,7 +26,7 @@ func NewDirectClient(localRouteId, routeId, host string, port int) *DirectClient
 func (c *DirectClient) Start() {
 	conn, err := net.Dial("tcp", net.JoinHostPort(c.host, intToString(c.port)))
 	if err != nil {
-		log.Printf("rpc client connect error routeId=%s: %v", c.routeId, err)
+		slog.Warn("rpc client connect error", "routeId", c.routeId, "error", err)
 		return
 	}
 	c.conn = conn
