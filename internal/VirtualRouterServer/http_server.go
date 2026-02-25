@@ -20,6 +20,8 @@ type HttpServer struct {
 	http *http.Server
 }
 
+const authCookieName = "virtual-router-admin-token"
+
 func NewHttpServer(cfg *config.RouterServerConfig, srv *Server) *HttpServer {
 	return &HttpServer{cfg: cfg, srv: srv}
 }
@@ -85,6 +87,7 @@ func (h *HttpServer) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Password == h.cfg.AdminPassword {
 		token, _ := GenerateToken("admin")
+		h.setAuthCookie(w, token)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"success": true,
 			"message": "登录成功",
@@ -115,6 +118,7 @@ func (h *HttpServer) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]any{"success": false, "message": "Token 无效，请重新登录"})
 		return
 	}
+	h.setAuthCookie(w, newToken)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "Token 刷新成功",
@@ -144,6 +148,7 @@ func (h *HttpServer) handleValidate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HttpServer) handleLogout(w http.ResponseWriter, r *http.Request) {
+	h.clearAuthCookie(w)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true, "message": "登出成功"})
 }
 
@@ -706,7 +711,34 @@ func extractToken(r *http.Request) string {
 	if strings.HasPrefix(auth, "Bearer ") {
 		return strings.TrimPrefix(auth, "Bearer ")
 	}
+	if cookie, err := r.Cookie(authCookieName); err == nil {
+		return strings.TrimSpace(cookie.Value)
+	}
 	return ""
+}
+
+func (h *HttpServer) setAuthCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Now().Add(tokenExpire),
+		MaxAge:   int(tokenExpire.Seconds()),
+	})
+}
+
+func (h *HttpServer) clearAuthCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     authCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, obj any) {

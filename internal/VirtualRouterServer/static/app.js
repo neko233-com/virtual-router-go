@@ -21,10 +21,11 @@ const state = {
   },
 };
 
-const passwordInput = document.getElementById("password");
-const loginBtn = document.getElementById("loginBtn");
+const AUTH_TOKEN_KEY = "virtual-router-admin-token";
+
 const refreshBtn = document.getElementById("refreshBtn");
-const loginMsg = document.getElementById("loginMsg");
+const logoutBtn = document.getElementById("logoutBtn");
+const appMsg = document.getElementById("appMsg");
 const tabs = document.getElementById("tabs");
 
 const stats = document.getElementById("stats");
@@ -61,8 +62,8 @@ const closeRpcDebugBtn = document.getElementById("closeRpcDebugBtn");
 const rpcDebugBackdrop = document.getElementById("rpcDebugBackdrop");
 const rpcDebugModal = document.getElementById("rpcDebugModal");
 
-loginBtn.addEventListener("click", login);
 refreshBtn.addEventListener("click", () => loadAll());
+logoutBtn.addEventListener("click", logout);
 tabs.addEventListener("click", onTabClick);
 loadLogsBtn.addEventListener("click", () => loadLogs());
 exportLogsBtn.addEventListener("click", exportLogs);
@@ -80,38 +81,94 @@ rpcDebugBackdrop.addEventListener("click", closeRpcDebugModal);
 window.addEventListener("resize", resizeCharts);
 
 initCharts();
+restoreAuthState();
 
-async function login() {
-  setMessage("登录中...");
+function enableAuthorizedUI() {
+  refreshBtn.disabled = false;
+  logoutBtn.disabled = false;
+  loadStubsBtn.disabled = false;
+  sendRpcBtn.disabled = false;
+  stubSelect.disabled = false;
+  loadLogsBtn.disabled = false;
+  exportLogsBtn.disabled = false;
+  updatePasswordBtn.disabled = false;
+  searchRoutersBtn.disabled = false;
+  searchRpcTrafficBtn.disabled = false;
+  openRpcDebugBtn.disabled = false;
+}
+
+async function restoreAuthState() {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  let ok = false;
+  if (token) {
+    ok = await validateOrRefreshToken(token);
+  } else {
+    ok = await refreshTokenFromServerSession();
+  }
+  if (!ok) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    state.token = "";
+    redirectToLogin("登录已过期，请重新登录");
+    return;
+  }
+
+  enableAuthorizedUI();
+  setMessage("已恢复登录状态");
+  await loadAll(true);
+  startAutoRefresh();
+}
+
+async function refreshTokenFromServerSession() {
   try {
-    const resp = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: passwordInput.value || "" }),
-    });
-    const data = await resp.json();
-    if (!resp.ok || !data.success) {
-      setMessage(data.message || "登录失败");
-      return;
+    const refreshResp = await fetch("/api/auth/refresh");
+    if (!refreshResp.ok) {
+      return false;
     }
+    const refreshData = await refreshResp.json();
+    const newToken = refreshData?.data?.token || "";
+    if (!newToken) {
+      return false;
+    }
+    state.token = newToken;
+    localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
 
-    state.token = data.data.token;
-    refreshBtn.disabled = false;
-    loadStubsBtn.disabled = false;
-    sendRpcBtn.disabled = false;
-    stubSelect.disabled = false;
-    loadLogsBtn.disabled = false;
-    exportLogsBtn.disabled = false;
-    updatePasswordBtn.disabled = false;
-    searchRoutersBtn.disabled = false;
-    searchRpcTrafficBtn.disabled = false;
-    openRpcDebugBtn.disabled = false;
+async function validateOrRefreshToken(token) {
+  try {
+    const validateResp = await fetch("/api/auth/validate", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (validateResp.ok) {
+      const validateData = await validateResp.json();
+      if (validateData.valid === true) {
+        state.token = token;
+        return true;
+      }
+    }
+  } catch (_) {
+  }
 
-    setMessage("登录成功");
-    await loadAll();
-    startAutoRefresh();
-  } catch (error) {
-    setMessage(`登录异常: ${error.message || error}`);
+  try {
+    const refreshResp = await fetch("/api/auth/refresh", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!refreshResp.ok) {
+      return false;
+    }
+    const refreshData = await refreshResp.json();
+    const newToken = refreshData?.data?.token || "";
+    if (!newToken) {
+      return false;
+    }
+    state.token = newToken;
+    localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -315,6 +372,25 @@ async function apiGet(path) {
     throw new Error(data.message || `请求失败: ${path}`);
   }
   return data;
+}
+
+async function logout() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST", headers: state.token ? { Authorization: `Bearer ${state.token}` } : undefined });
+  } catch (_) {
+  }
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+  state.token = "";
+  redirectToLogin();
+}
+
+function redirectToLogin(message = "") {
+  if (message) {
+    const encoded = encodeURIComponent(message);
+    window.location.href = `/login.html?msg=${encoded}`;
+    return;
+  }
+  window.location.href = "/login.html";
 }
 
 async function apiPost(path, body) {
@@ -741,7 +817,7 @@ function sleep(ms) {
 }
 
 function setMessage(message) {
-  loginMsg.textContent = message;
+  appMsg.textContent = message;
 }
 
 function setRpcMessage(message) {
@@ -776,6 +852,8 @@ async function updateAdminPassword() {
     oldPasswordInput.value = "";
     newPasswordInput.value = "";
     confirmPasswordInput.value = "";
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    setTimeout(() => redirectToLogin("密码已更新，请重新登录"), 600);
   } catch (error) {
     setSettingsMessage(`更新失败: ${error.message || error}`);
   }

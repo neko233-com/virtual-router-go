@@ -19,8 +19,11 @@ func NewRelayClient(targetRouteId string, client RouterClientSender) *RelayClien
 }
 
 func (c *RelayClient) Call(packetId int, timeout time.Duration, args []json.RawMessage) (string, error) {
+	start := time.Now()
 	if !c.routerClient.IsConnected() {
-		return "", errors.New("VirtualRouterClient 未连接，无法发起 RPC 调用")
+		if err := c.routerClient.AwaitConnected(timeout); err != nil {
+			return "", errors.New("VirtualRouterClient 未连接，且等待重连超时")
+		}
 	}
 
 	// 本地调用优化
@@ -39,8 +42,24 @@ func (c *RelayClient) Call(packetId int, timeout time.Duration, args []json.RawM
 
 	future := NewFuture(req.RpcUid)
 	RelayFutureManagerInstance().Register(future)
-	_ = c.routerClient.Send(c.targetRouteId, core.RouteMessageTypeRpcRequest, req)
-	return future.Await(timeout)
+	if err := c.routerClient.Send(c.targetRouteId, core.RouteMessageTypeRpcRequest, req); err != nil {
+		remaining := timeout - time.Since(start)
+		if remaining <= 0 {
+			return "", err
+		}
+		if waitErr := c.routerClient.AwaitConnected(remaining); waitErr != nil {
+			return "", err
+		}
+		if err := c.routerClient.Send(c.targetRouteId, core.RouteMessageTypeRpcRequest, req); err != nil {
+			return "", err
+		}
+	}
+
+	remaining := timeout - time.Since(start)
+	if remaining <= 0 {
+		remaining = 10 * time.Millisecond
+	}
+	return future.Await(remaining)
 }
 
 func invokeLocal(packetId int, args []json.RawMessage) (string, error) {

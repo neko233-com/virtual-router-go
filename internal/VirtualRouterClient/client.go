@@ -100,8 +100,8 @@ func (c *Client) tryConnect() bool {
 	if err != nil {
 		return false
 	}
+	c.closeConn()
 	c.conn = conn
-	c.reconnectAttempt.Store(false)
 	return true
 }
 
@@ -118,9 +118,7 @@ func (c *Client) startHeartbeat() {
 			case <-time.After(time.Duration(c.cfg.HeartBeatIntervalSecond) * time.Second):
 			}
 			if ok := c.sendHeartbeat(); !ok {
-				c.isOpen.Store(false)
-				slog.Warn("Router Center 离线", "host", c.routerCenterHost, "port", c.routerCenterPort)
-				c.startBackgroundReconnect()
+				c.onConnectionLost("heartbeat failed", nil)
 				return
 			}
 		}
@@ -162,7 +160,7 @@ func (c *Client) readLoop() {
 	for {
 		payload, err := core.ReadFrame(c.conn)
 		if err != nil {
-			c.isOpen.Store(false)
+			c.onConnectionLost("read loop closed", err)
 			return
 		}
 		msg, err := core.DecodeRouteMessagePayload(payload)
@@ -231,10 +229,15 @@ func (c *Client) handleSystemError(msg *core.RouteMessage) {
 }
 
 func (c *Client) startBackgroundReconnect() {
+	if !c.needConnect.Load() {
+		return
+	}
 	if !c.reconnectAttempt.CompareAndSwap(false, true) {
 		return
 	}
 	go func() {
+		defer c.reconnectAttempt.Store(false)
+		attempt := 0
 		for {
 			if !c.needConnect.Load() {
 				return
@@ -242,15 +245,18 @@ func (c *Client) startBackgroundReconnect() {
 			if !c.isOpen.Load() {
 				if c.tryConnect() {
 					c.isOpen.Store(true)
+					slog.Info("重连 Router Center 成功", "host", c.routerCenterHost, "port", c.routerCenterPort, "routeId", c.routeId)
 					c.startHeartbeat()
 					go c.readLoop()
 					return
 				}
+				attempt++
 			}
+			retryInterval := c.nextReconnectDelay(attempt)
 			select {
 			case <-c.stopCh:
 				return
-			case <-time.After(time.Duration(c.cfg.ReconnectIntervalMs) * time.Millisecond):
+			case <-time.After(retryInterval):
 			}
 		}
 	}()
@@ -278,9 +284,18 @@ func (c *Client) Send(toRouteId string, msgType core.RouteMessageType, obj any) 
 	if err != nil {
 		return err
 	}
+	var conn net.Conn
 	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	_, err = c.conn.Write(core.EncodeFrame(payload))
+	conn = c.conn
+	if conn == nil {
+		c.writeMu.Unlock()
+		return errors.New("VirtualRouterClient 未连接到 Router Center，无法发送消息")
+	}
+	_, err = conn.Write(core.EncodeFrame(payload))
+	c.writeMu.Unlock()
+	if err != nil {
+		c.onConnectionLost("send failed", err)
+	}
 	return err
 }
 
@@ -292,8 +307,31 @@ func (c *Client) Shutdown() {
 	c.needConnect.Store(false)
 	c.isOpen.Store(false)
 	close(c.stopCh)
+	c.closeConn()
+}
+
+func (c *Client) onConnectionLost(reason string, err error) {
+	if !c.needConnect.Load() {
+		return
+	}
+	wasOpen := c.isOpen.Swap(false)
+	c.closeConn()
+	if wasOpen {
+		if err != nil {
+			slog.Warn("Router Center 连接断开，准备重连", "reason", reason, "error", err, "host", c.routerCenterHost, "port", c.routerCenterPort)
+		} else {
+			slog.Warn("Router Center 连接断开，准备重连", "reason", reason, "host", c.routerCenterHost, "port", c.routerCenterPort)
+		}
+	}
+	c.startBackgroundReconnect()
+}
+
+func (c *Client) closeConn() {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	if c.conn != nil {
 		_ = c.conn.Close()
+		c.conn = nil
 	}
 }
 
@@ -315,6 +353,37 @@ func (c *Client) AwaitRpcRouterInfoFirstReady() error {
 	return nil
 }
 
+func (c *Client) AwaitConnected(timeout time.Duration) error {
+	if c.IsConnected() {
+		return nil
+	}
+	if !c.needConnect.Load() {
+		return errors.New("VirtualRouterClient 未启动")
+	}
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if c.IsConnected() {
+			return nil
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return errors.New("等待 VirtualRouterClient 重连超时")
+		}
+		wait := 100 * time.Millisecond
+		if remaining < wait {
+			wait = remaining
+		}
+		select {
+		case <-c.stopCh:
+			return errors.New("VirtualRouterClient 已关闭")
+		case <-time.After(wait):
+		}
+	}
+}
+
 func (c *Client) AwaitSystemClose() {
 	for {
 		time.Sleep(5 * time.Second)
@@ -330,4 +399,26 @@ func safeData(msg *core.RouteMessage) string {
 
 func intToString(v int) string {
 	return strconv.Itoa(v)
+}
+
+func (c *Client) nextReconnectDelay(attempt int) time.Duration {
+	baseMs := c.cfg.ReconnectIntervalMs
+	if baseMs <= 0 {
+		baseMs = 10000
+	}
+	base := time.Duration(baseMs) * time.Millisecond
+	if attempt <= 1 {
+		return base
+	}
+	delay := base
+	for i := 1; i < attempt; i++ {
+		delay *= 2
+		if delay >= 60*time.Second {
+			return 60 * time.Second
+		}
+	}
+	if delay > 60*time.Second {
+		return 60 * time.Second
+	}
+	return delay
 }

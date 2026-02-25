@@ -11,11 +11,11 @@
   <div class="layout">
     <aside class="sidebar">
       <div class="brand">Virtual Router</div>
-      <div class="login-box">
-        <input id="password" type="password" value="root" placeholder="管理员密码" />
-        <button id="loginBtn">登录</button>
+      <div class="session-box">
+        <div class="session-title">控制台会话</div>
         <button id="refreshBtn" disabled>手动刷新</button>
-        <p id="loginMsg" class="msg"></p>
+        <button id="logoutBtn" class="danger" disabled>退出登录</button>
+        <p id="appMsg" class="msg"></p>
       </div>
       <nav class="tabs" id="tabs">
         <button class="tab active" data-tab="home">首页</button>

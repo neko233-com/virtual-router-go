@@ -29,7 +29,7 @@ body {
   font-weight: 700;
 }
 
-.login-box {
+.session-box {
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
@@ -37,6 +37,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.session-title {
+  font-size: 13px;
+  color: #cbd5e1;
 }
 
 .tabs {
@@ -135,7 +140,7 @@ button:disabled {
   color: #374151;
 }
 
-#loginMsg {
+#appMsg {
   color: #d1d5db;
 }
 

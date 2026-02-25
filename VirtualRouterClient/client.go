@@ -2,6 +2,7 @@ package VirtualRouterClient
 
 import (
 	"errors"
+	"time"
 
 	internalClient "github.com/neko233-com/virtual-router-go/internal/VirtualRouterClient"
 )
@@ -51,6 +52,10 @@ func (c *Client) Send(toRouteId string, msgType RouteMessageType, obj any) error
 
 func (c *Client) AwaitRpcRouterInfoFirstReady() error {
 	return c.inner.AwaitRpcRouterInfoFirstReady()
+}
+
+func (c *Client) AwaitConnected(timeout time.Duration) error {
+	return c.inner.AwaitConnected(timeout)
 }
 
 func (c *Client) AwaitSystemClose() {

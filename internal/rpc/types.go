@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"errors"
+	"time"
+
 	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
@@ -15,4 +17,5 @@ type RouterClientSender interface {
 	Send(toRouteId string, msgType core.RouteMessageType, obj any) error
 	IsConnected() bool
 	RouteId() string
+	AwaitConnected(timeout time.Duration) error
 }

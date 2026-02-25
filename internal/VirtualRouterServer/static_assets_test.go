@@ -14,10 +14,25 @@ func TestMonitorStaticHandler_ServesIndexAndAppJS(t *testing.T) {
 	indexReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	indexResp := httptest.NewRecorder()
 	h.ServeHTTP(indexResp, indexReq)
-	if indexResp.Code != http.StatusOK {
-		t.Fatalf("expected status 200 for /, got %d", indexResp.Code)
+	if indexResp.Code != http.StatusFound {
+		t.Fatalf("expected status 302 for / without token, got %d", indexResp.Code)
 	}
-	indexBody, _ := io.ReadAll(indexResp.Body)
+	if loc := indexResp.Header().Get("Location"); loc != "/login.html" {
+		t.Fatalf("expected redirect to /login.html, got %q", loc)
+	}
+
+	token, err := GenerateToken("admin")
+	if err != nil {
+		t.Fatalf("generate token error: %v", err)
+	}
+	authReq := httptest.NewRequest(http.MethodGet, "/", nil)
+	authReq.AddCookie(&http.Cookie{Name: authCookieName, Value: token})
+	authResp := httptest.NewRecorder()
+	h.ServeHTTP(authResp, authReq)
+	if authResp.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for / with token, got %d", authResp.Code)
+	}
+	indexBody, _ := io.ReadAll(authResp.Body)
 	if !strings.Contains(string(indexBody), "Virtual Router Monitor") {
 		t.Fatalf("index html does not contain expected title")
 	}
@@ -31,5 +46,12 @@ func TestMonitorStaticHandler_ServesIndexAndAppJS(t *testing.T) {
 	appBody, _ := io.ReadAll(appResp.Body)
 	if !strings.Contains(string(appBody), "const state") {
 		t.Fatalf("app.js does not contain expected content")
+	}
+
+	loginReq := httptest.NewRequest(http.MethodGet, "/login.html", nil)
+	loginResp := httptest.NewRecorder()
+	h.ServeHTTP(loginResp, loginReq)
+	if loginResp.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for /login.html, got %d", loginResp.Code)
 	}
 }

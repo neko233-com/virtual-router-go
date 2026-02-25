@@ -75,7 +75,7 @@ func NewDefaultRouterClientConfig() *RouterClientConfig {
 	return &RouterClientConfig{
 		RpcMode:                 "relay",
 		HeartBeatIntervalSecond: 10,
-		ReconnectIntervalMs:     30000,
+		ReconnectIntervalMs:     10000,
 	}
 }
 
@@ -96,7 +96,7 @@ func (cfg *RouterClientConfig) Check() error {
 		cfg.HeartBeatIntervalSecond = 10
 	}
 	if cfg.ReconnectIntervalMs <= 0 {
-		cfg.ReconnectIntervalMs = 30000
+		cfg.ReconnectIntervalMs = 10000
 	}
 	isDirect := strings.EqualFold(cfg.RpcMode, "direct")
 	if isDirect {

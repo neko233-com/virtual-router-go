@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Virtual Router Login</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 20% 20%, #1d4ed8 0%, #0f172a 45%, #020617 100%);
+      font-family: Arial, sans-serif;
+      color: #e2e8f0;
+    }
+    .card {
+      width: min(420px, calc(100vw - 32px));
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+    }
+    p {
+      margin: 0 0 12px;
+      color: #cbd5e1;
+      font-size: 14px;
+    }
+    input {
+      width: 100%;
+      border: 1px solid #334155;
+      background: #0b1220;
+      color: #e2e8f0;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      outline: none;
+    }
+    button {
+      width: 100%;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:disabled { background: #64748b; cursor: not-allowed; }
+    #msg {
+      margin-top: 10px;
+      min-height: 20px;
+      color: #fbbf24;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Virtual Router</h1>
+    <p>请先登录后台管理系统</p>
+    <input id="password" type="password" placeholder="管理员密码" autofocus />
+    <button id="loginBtn">登录</button>
+    <div id="msg"></div>
+  </main>
+
+  <script>
+    const AUTH_TOKEN_KEY = "virtual-router-admin-token";
+    const passwordInput = document.getElementById("password");
+    const loginBtn = document.getElementById("loginBtn");
+    const msg = document.getElementById("msg");
+
+    loginBtn.addEventListener("click", login);
+    passwordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") login();
+    });
+
+    restoreIfLoggedIn();
+    const urlParams = new URLSearchParams(window.location.search);
+    const initMsg = urlParams.get("msg");
+    if (initMsg) setMessage(initMsg);
+
+    async function restoreIfLoggedIn() {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (token) {
+        try {
+          const resp = await fetch("/api/auth/validate", { headers: { Authorization: `Bearer ${token}` } });
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.valid === true) {
+              window.location.href = "/";
+              return;
+            }
+          }
+        } catch (_) {
+        }
+      }
+
+      try {
+        const refreshResp = await fetch("/api/auth/refresh");
+        if (!refreshResp.ok) return;
+        const refreshData = await refreshResp.json();
+        const newToken = refreshData?.data?.token || "";
+        if (!newToken) return;
+        localStorage.setItem(AUTH_TOKEN_KEY, newToken);
+        window.location.href = "/";
+      } catch (_) {
+      }
+    }
+
+    async function login() {
+      const password = passwordInput.value || "";
+      if (!password) {
+        setMessage("请输入管理员密码");
+        return;
+      }
+      loginBtn.disabled = true;
+      setMessage("登录中...");
+      try {
+        const resp = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.success) {
+          setMessage(data.message || "登录失败");
+          return;
+        }
+        const token = data?.data?.token || "";
+        if (!token) {
+          setMessage("登录失败：未获取到 token");
+          return;
+        }
+        localStorage.setItem(AUTH_TOKEN_KEY, token);
+        window.location.href = "/";
+      } catch (error) {
+        setMessage(`登录异常: ${error.message || error}`);
+      } finally {
+        loginBtn.disabled = false;
+      }
+    }
+
+    function setMessage(text) {
+      msg.textContent = text;
+    }
+  </script>
+</body>
+</html>
