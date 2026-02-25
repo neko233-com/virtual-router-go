@@ -66,7 +66,7 @@ func ReadRouterServerConfig(fileName string) (*RouterServerConfig, error) {
 		cfg.HTTPMonitorPort = 19999
 	}
 	if cfg.AdminPassword == "" {
-		cfg.AdminPassword = "root"
+		cfg.AdminPassword = "neko233"
 	}
 	return cfg, nil
 }

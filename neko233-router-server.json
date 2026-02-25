@@ -1,0 +1,5 @@
+{
+  "routerServerPort": 9999,
+  "httpMonitorPort": 19999,
+  "adminPassword": "neko233"
+}

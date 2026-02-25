@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Virtual Router Monitor</title>
+  <link rel="stylesheet" href="/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">Virtual Router</div>
+      <div class="login-box">
+        <input id="password" type="password" value="root" placeholder="管理员密码" />
+        <button id="loginBtn">登录</button>
+        <button id="refreshBtn" disabled>手动刷新</button>
+        <p id="loginMsg" class="msg"></p>
+      </div>
+      <nav class="tabs" id="tabs">
+        <button class="tab active" data-tab="home">首页</button>
+        <button class="tab" data-tab="rpc">RPC节点列表</button>
+        <button class="tab" data-tab="logs">日志</button>
+        <button class="tab" data-tab="settings">系统设置</button>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <section class="panel active" id="tab-home">
+        <h1>首页</h1>
+        <div class="stats" id="stats"></div>
+        <div class="chart-grid">
+          <div class="card chart-card">
+            <h2>请求趋势</h2>
+            <div id="requestChart" class="chart"></div>
+          </div>
+          <div class="card chart-card">
+            <h2>内存占用</h2>
+            <div id="memoryChart" class="chart"></div>
+          </div>
+          <div class="card chart-card">
+            <h2>连接与在线路由</h2>
+            <div id="onlineChart" class="chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-rpc">
+        <h1>RPC节点列表</h1>
+        <div class="card">
+          <h2>在线节点</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>RouteId</th>
+                <th>模式</th>
+                <th>地址</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody id="routersBody"></tbody>
+          </table>
+        </div>
+        <div class="card">
+          <h2>RPC 调试发送</h2>
+          <div class="row rpc-row">
+            <label for="targetRouteId">目标 RouteId</label>
+            <input id="targetRouteId" type="text" placeholder="例如: client-1" />
+
+            <label for="packetId">PacketId</label>
+            <input id="packetId" type="number" min="1" placeholder="例如: 1001" />
+
+            <button id="loadStubsBtn" disabled>加载方法</button>
+          </div>
+          <div class="row rpc-row">
+            <label for="stubSelect">可用方法</label>
+            <select id="stubSelect" disabled>
+              <option value="">请先加载方法</option>
+            </select>
+          </div>
+          <div class="row rpc-row">
+            <label for="paramText">参数(字符串)</label>
+            <textarea id="paramText" rows="5" placeholder="可直接填写 JSON 字符串，作为方法参数 string 传递"></textarea>
+          </div>
+          <div class="row rpc-row">
+            <button id="sendRpcBtn" disabled>发送 RPC</button>
+            <span id="rpcMsg" class="msg"></span>
+          </div>
+          <pre id="rpcResult" class="result">暂无结果</pre>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-logs">
+        <h1>日志</h1>
+        <div class="card">
+          <div class="row">
+            <label for="logLimit">条数</label>
+            <input id="logLimit" type="number" min="10" max="1000" value="200" />
+            <button id="loadLogsBtn" disabled>刷新日志</button>
+          </div>
+          <pre id="logOutput" class="result">暂无日志</pre>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-settings">
+        <h1>系统设置</h1>
+        <div class="card">
+          <h2>运行配置</h2>
+          <div class="kv-list" id="settingsInfo"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -45,6 +45,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.listener = ln
 	log.Printf("Router Server 启动成功, 端口=%d", s.cfg.RouterServerPort)
+	logTCPAccessAddresses("Router Server", s.cfg.RouterServerPort)
 
 	go func() {
 		<-ctx.Done()

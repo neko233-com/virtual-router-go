@@ -11,9 +11,9 @@ New-Item -ItemType Directory -Path $dist | Out-Null
 
 $targets = @(
     @{ os = "windows"; arch = "amd64" },
-    @{ os = "windows"; arch = "386" },
+    @{ os = "windows"; arch = "arm64" },
     @{ os = "linux";   arch = "amd64" },
-    @{ os = "linux";   arch = "386" },
+    @{ os = "linux";   arch = "arm64" },
     @{ os = "darwin";  arch = "amd64" },
     @{ os = "darwin";  arch = "arm64" }
 )
@@ -22,6 +22,11 @@ $commands = @(
     @{ name = "router-center"; path = "./cmd/router-center" },
     @{ name = "router-client"; path = "./cmd/router-client" }
 )
+
+$serverConfigFile = Join-Path $root "neko233-router-server.json"
+if (-not (Test-Path $serverConfigFile)) {
+    throw "默认配置文件不存在: $serverConfigFile"
+}
 
 $env:CGO_ENABLED = "0"
 
@@ -45,6 +50,8 @@ foreach ($t in $targets) {
         Write-Host "Building $($cmd.name) for $os/$arch ..."
         go build -trimpath -ldflags "-s -w" -o $outFile $cmd.path
     }
+
+    Copy-Item -Path $serverConfigFile -Destination (Join-Path $outDir "neko233-router-server.json") -Force
 }
 
 Write-Host "Build complete. Output: $dist"

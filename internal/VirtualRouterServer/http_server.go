@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,12 +40,14 @@ func (h *HttpServer) Start(ctx context.Context) error {
 	mux.HandleFunc("/api/message-stats", h.withAuth(h.handleMessageStats))
 	mux.HandleFunc("/api/monitor-stats", h.withAuth(h.handleMonitorStats))
 	mux.HandleFunc("/api/viewers", h.withAuth(h.handleViewers))
+	mux.HandleFunc("/api/logs", h.withAuth(h.handleLogs))
 
 	mux.HandleFunc("/api/debug/validate-route-id", h.withAuth(h.handleValidateRouteId))
 	mux.HandleFunc("/api/debug/available-routes", h.withAuth(h.handleAvailableRoutes))
 	mux.HandleFunc("/api/debug/send-rpc", h.withAuth(h.handleDebugSendRpc))
 	mux.HandleFunc("/api/debug/rpc-result", h.withAuth(h.handleDebugRpcResult))
 	mux.HandleFunc("/api/debug/rpc-stubs", h.withAuth(h.handleDebugRpcStubs))
+	mux.Handle("/", monitorStaticHandler())
 
 	h.http = &http.Server{
 		Addr:              ":" + intToString(h.cfg.HTTPMonitorPort),
@@ -58,6 +61,7 @@ func (h *HttpServer) Start(ctx context.Context) error {
 	}()
 
 	log.Printf("HTTP Monitor 启动成功, 端口=%d", h.cfg.HTTPMonitorPort)
+	logHTTPAccessURLs("HTTP Monitor", h.cfg.HTTPMonitorPort)
 	return h.http.ListenAndServe()
 }
 
@@ -299,6 +303,27 @@ func (h *HttpServer) handleViewers(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"data": map[string]any{
 			"activeViewers": currentConn,
+		},
+	})
+}
+
+func (h *HttpServer) handleLogs(w http.ResponseWriter, r *http.Request) {
+	limit := 200
+	if value := r.URL.Query().Get("limit"); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil && parsed > 0 {
+			if parsed > 1000 {
+				parsed = 1000
+			}
+			limit = parsed
+		}
+	}
+
+	lines := GetRecentProcessLogs(limit)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"data": map[string]any{
+			"lines": lines,
+			"count": len(lines),
 		},
 	})
 }

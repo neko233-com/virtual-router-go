@@ -25,6 +25,10 @@ func ReadRouterServerConfig(fileName string) (*config.RouterServerConfig, error)
 	return config.ReadRouterServerConfig(fileName)
 }
 
+func InstallProcessLogCapture(capacity int) {
+	server.InstallProcessLogCapture(capacity)
+}
+
 func StartServer(ctx context.Context, cfg *config.RouterServerConfig) (*server.Server, *server.HttpServer, error) {
 	srv := server.NewServer(cfg)
 	httpSrv := server.NewHttpServer(cfg, srv)

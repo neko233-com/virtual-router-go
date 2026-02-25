@@ -11,6 +11,8 @@ import (
 )
 
 func main() {
+	VirtualRouterServer.InstallProcessLogCapture(800)
+
 	cfg, err := VirtualRouterServer.ReadRouterServerConfig("")
 	if err != nil {
 		log.Fatal(err)
