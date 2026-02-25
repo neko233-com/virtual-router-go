@@ -212,9 +212,8 @@ func (h *HttpServer) handleMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HttpServer) handleRouters(w http.ResponseWriter, r *http.Request) {
-	nodes := h.srv.SessionManager().GetAllRouteNodeList()
+	nodes := h.srv.SessionManager().GetAllSessionSnapshots()
 	keyword := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("keyword")))
-	currentTime := time.Now().UnixMilli()
 	routers := make([]any, 0, len(nodes))
 	for _, n := range nodes {
 		if keyword != "" && !strings.Contains(strings.ToLower(n.RouterId), keyword) {
@@ -227,15 +226,40 @@ func (h *HttpServer) handleRouters(w http.ResponseWriter, r *http.Request) {
 			rpcMode = "relay"
 			address = "-"
 		}
+		geo := resolveIPGeo(n.RemoteIP)
+		location := strings.TrimSpace(strings.TrimSpace(geo.RegionName) + " " + strings.TrimSpace(geo.City))
+		if location == "" {
+			location = "-"
+		}
+		countryLabel := geo.Country
+		if geo.CountryCode != "" && geo.CountryCode != "LOCAL" && geo.CountryCode != "LAN" {
+			countryLabel = geo.Country + " (" + geo.CountryCode + ")"
+		}
+		if countryLabel == "" {
+			countryLabel = "未知"
+		}
+
 		routers = append(routers, map[string]any{
 			"routeId":       n.RouterId,
 			"rpcHost":       n.HostForRpc,
 			"rpcPort":       n.PortForRpc,
 			"address":       address,
+			"remoteAddr":    n.RemoteAddr,
+			"remoteIp":      n.RemoteIP,
+			"remotePort":    n.RemotePort,
+			"country":       countryLabel,
+			"countryCode":   geo.CountryCode,
+			"region":        geo.RegionName,
+			"city":          geo.City,
+			"location":      location,
+			"isp":           geo.ISP,
+			"org":           geo.Org,
+			"as":            geo.AS,
+			"stubCount":     n.StubCount,
 			"rpcMode":       rpcMode,
 			"status":        "ONLINE",
 			"connected":     true,
-			"lastHeartbeat": currentTime,
+			"lastHeartbeat": n.LastHeartbeatMs,
 			"uptime":        0,
 		})
 	}
@@ -317,11 +341,12 @@ func (h *HttpServer) handleMessageStats(w http.ResponseWriter, r *http.Request) 
 
 func (h *HttpServer) handleMonitorStats(w http.ResponseWriter, r *http.Request) {
 	_, currentConn, _, totalRequests, _ := h.srv.Stats()
+	requestsLastMinute := h.srv.RequestsPerMinute()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"data": map[string]any{
 			"totalRequests":      totalRequests,
-			"requestsLastMinute": 0,
+			"requestsLastMinute": requestsLastMinute,
 			"activeViewers":      currentConn,
 			"uptime":             0,
 			"totalConnections":   currentConn,

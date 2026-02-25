@@ -7,12 +7,17 @@ const state = {
     totalRequests: [],
     totalConnections: [],
     onlineRouters: [],
+    memoryUsagePercent: [],
   },
   charts: {
     request: null,
     memory: null,
     online: null,
     rpcRank: null,
+    memoryUsageTrend: null,
+    countryDist: null,
+    modeDist: null,
+    stubTop: null,
   },
 };
 
@@ -28,6 +33,8 @@ const rpcRankBody = document.getElementById("rpcRankBody");
 const settingsInfo = document.getElementById("settingsInfo");
 const routerKeywordInput = document.getElementById("routerKeyword");
 const searchRoutersBtn = document.getElementById("searchRoutersBtn");
+const rpcTrafficKeywordInput = document.getElementById("rpcTrafficKeyword");
+const searchRpcTrafficBtn = document.getElementById("searchRpcTrafficBtn");
 const logLimitInput = document.getElementById("logLimit");
 const logKeywordInput = document.getElementById("logKeyword");
 const logLevelInput = document.getElementById("logLevel");
@@ -49,6 +56,10 @@ const paramText = document.getElementById("paramText");
 const sendRpcBtn = document.getElementById("sendRpcBtn");
 const rpcMsg = document.getElementById("rpcMsg");
 const rpcResult = document.getElementById("rpcResult");
+const openRpcDebugBtn = document.getElementById("openRpcDebugBtn");
+const closeRpcDebugBtn = document.getElementById("closeRpcDebugBtn");
+const rpcDebugBackdrop = document.getElementById("rpcDebugBackdrop");
+const rpcDebugModal = document.getElementById("rpcDebugModal");
 
 loginBtn.addEventListener("click", login);
 refreshBtn.addEventListener("click", () => loadAll());
@@ -56,11 +67,15 @@ tabs.addEventListener("click", onTabClick);
 loadLogsBtn.addEventListener("click", () => loadLogs());
 exportLogsBtn.addEventListener("click", exportLogs);
 searchRoutersBtn.addEventListener("click", () => loadRoutersAndRanking());
+searchRpcTrafficBtn.addEventListener("click", () => loadRoutersAndRanking());
 
 loadStubsBtn.addEventListener("click", loadStubs);
 sendRpcBtn.addEventListener("click", sendRpc);
 stubSelect.addEventListener("change", onStubChange);
 updatePasswordBtn.addEventListener("click", updateAdminPassword);
+openRpcDebugBtn.addEventListener("click", openRpcDebugModal);
+closeRpcDebugBtn.addEventListener("click", closeRpcDebugModal);
+rpcDebugBackdrop.addEventListener("click", closeRpcDebugModal);
 
 window.addEventListener("resize", resizeCharts);
 
@@ -89,6 +104,8 @@ async function login() {
     exportLogsBtn.disabled = false;
     updatePasswordBtn.disabled = false;
     searchRoutersBtn.disabled = false;
+    searchRpcTrafficBtn.disabled = false;
+    openRpcDebugBtn.disabled = false;
 
     setMessage("登录成功");
     await loadAll();
@@ -158,7 +175,7 @@ async function loadAll(isSilent = false) {
       apiGet("/api/monitor-stats"),
       apiGet("/api/viewers"),
       apiGet("/api/rpc-stats"),
-      apiGet(`/api/rpc/router-ranking?limit=20&keyword=${encodeURIComponent((routerKeywordInput.value || "").trim())}`),
+      apiGet(`/api/rpc/router-ranking?limit=50&keyword=${encodeURIComponent((rpcTrafficKeywordInput.value || "").trim())}`),
       apiGet("/api/system/settings"),
     ]);
 
@@ -177,16 +194,19 @@ async function loadAll(isSilent = false) {
     const routers = routersData.routers || routersData.list || [];
 
     renderStats([
-      ["运行时长(ms)", serverInfo.uptime || 0],
+      ["运行时长", formatDuration(serverInfo.uptime || 0)],
       ["总请求数", connData.totalRequests || 0],
       ["历史连接数", connData.totalConnections || 0],
       ["在线路由", routersData.online || routers.length || 0],
       ["活跃查看者", viewers.activeViewers || 0],
-      ["累计字节", rpcTotal.bytes || 0],
+      ["累计流量", formatBytesToMB(rpcTotal.bytes || 0)],
     ]);
     renderRouters(routers);
     renderRPCRankTable(rpcRanking);
     renderRPCRankChart(rpcRanking);
+    renderCountryDistributionChart(routers);
+    renderModeDistributionChart(routers);
+    renderStubTopChart(routers);
     syncRouteOptions(routers);
     renderSettings({
       osName: systemInfo.osName || "-",
@@ -194,19 +214,20 @@ async function loadAll(isSilent = false) {
       routerPort: routerInfo.port || 0,
       monitorPort: routerInfo.monitorPort || 0,
       cpuUsage: cpu.usage || 0,
-      memoryUsed: memory.used || 0,
-      memoryMax: memory.max || 0,
+      memoryUsed: formatBytesToMB(memory.used || 0),
+      memoryMax: formatBytesToMB(memory.max || 0),
       requestsLastMinute: monitor.requestsLastMinute || 0,
       adminPasswordConfigured: systemSettings.adminPasswordConfigured ? "是" : "否",
       logBufferCapacity: systemSettings.logBufferCapacity || 0,
     });
 
     updateHistory({
-      totalRequests: connData.totalRequests || 0,
+      totalRequests: monitor.requestsLastMinute || 0,
       totalConnections: connData.totalConnections || 0,
       onlineRouters: routersData.online || routers.length || 0,
       memoryUsed: memory.used || 0,
       memoryMax: memory.max || 0,
+      memoryUsagePercent: memory.usagePercent || 0,
     });
     refreshCharts();
 
@@ -338,18 +359,94 @@ function renderSettings(info) {
 
 function renderRouters(list) {
   if (!list.length) {
-    routersBody.innerHTML = `<tr><td colspan="4">暂无在线路由节点</td></tr>`;
+    routersBody.innerHTML = `<tr><td colspan="10">暂无在线路由节点</td></tr>`;
     return;
   }
   routersBody.innerHTML = list
     .map((r) => {
       const routeId = r.routeId || "-";
+      const lastHeartbeat = formatDateTime(r.lastHeartbeat || 0);
+      const remote = [r.remoteIp || "-", r.remotePort || "-"].join(":");
+      const country = r.country || "未知";
+      const location = r.location || [r.region || "", r.city || ""].filter(Boolean).join(" ") || "-";
+      const provider = [r.isp || "-", r.org || "-"].filter(Boolean).join(" / ");
       const mode = r.rpcMode || "-";
       const addr = r.address || "-";
+      const stubCount = Number(r.stubCount || 0);
       const status = r.status || (r.connected ? "ONLINE" : "OFFLINE");
-      return `<tr><td>${escapeHtml(routeId)}</td><td>${escapeHtml(mode)}</td><td>${escapeHtml(addr)}</td><td>${escapeHtml(status)}</td></tr>`;
+      const statusClass = String(status).toUpperCase() === "ONLINE" ? "status-badge status-online" : "status-badge status-offline";
+      return `<tr><td>${escapeHtml(routeId)}</td><td>${escapeHtml(lastHeartbeat)}</td><td>${escapeHtml(remote)}</td><td>${escapeHtml(country)}</td><td>${escapeHtml(location)}</td><td>${escapeHtml(provider)}</td><td>${escapeHtml(mode)}</td><td>${escapeHtml(addr)}</td><td>${escapeHtml(String(stubCount))}</td><td><span class="${statusClass}">${escapeHtml(status)}</span></td></tr>`;
     })
     .join("");
+}
+
+function renderCountryDistributionChart(routers) {
+  if (!state.charts.countryDist) {
+    return;
+  }
+  const bucket = new Map();
+  routers.forEach((item) => {
+    const key = item.country || "未知";
+    bucket.set(key, (bucket.get(key) || 0) + 1);
+  });
+  const data = Array.from(bucket.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12);
+
+  state.charts.countryDist.setOption({
+    tooltip: { trigger: "item" },
+    series: [
+      {
+        type: "pie",
+        radius: ["38%", "70%"],
+        data,
+      },
+    ],
+  });
+}
+
+function renderModeDistributionChart(routers) {
+  if (!state.charts.modeDist) {
+    return;
+  }
+  const relay = routers.filter((item) => String(item.rpcMode || "").toLowerCase() === "relay").length;
+  const direct = routers.filter((item) => String(item.rpcMode || "").toLowerCase() === "direct").length;
+  state.charts.modeDist.setOption({
+    tooltip: { trigger: "item" },
+    series: [
+      {
+        type: "pie",
+        radius: ["40%", "72%"],
+        data: [
+          { name: "Direct", value: direct },
+          { name: "Relay", value: relay },
+        ],
+      },
+    ],
+  });
+}
+
+function renderStubTopChart(routers) {
+  if (!state.charts.stubTop) {
+    return;
+  }
+  const sorted = [...routers]
+    .map((item) => ({ routeId: item.routeId || "-", stubCount: Number(item.stubCount || 0) }))
+    .sort((a, b) => b.stubCount - a.stubCount)
+    .slice(0, 10);
+
+  state.charts.stubTop.setOption({
+    tooltip: { trigger: "axis" },
+    xAxis: { type: "value" },
+    yAxis: { type: "category", data: sorted.map((item) => item.routeId), inverse: true },
+    series: [
+      {
+        type: "bar",
+        data: sorted.map((item) => item.stubCount),
+      },
+    ],
+  });
 }
 
 function renderRPCRankTable(list) {
@@ -389,6 +486,14 @@ function renderRPCRankChart(list) {
       },
     ],
   });
+}
+
+function openRpcDebugModal() {
+  rpcDebugModal.classList.remove("hidden");
+}
+
+function closeRpcDebugModal() {
+  rpcDebugModal.classList.add("hidden");
 }
 
 function syncRouteOptions(routers) {
@@ -504,6 +609,7 @@ function updateHistory(values) {
   pushHistory(state.history.totalRequests, values.totalRequests, max);
   pushHistory(state.history.totalConnections, values.totalConnections, max);
   pushHistory(state.history.onlineRouters, values.onlineRouters, max);
+  pushHistory(state.history.memoryUsagePercent, values.memoryUsagePercent, max);
 
   state._memoryUsed = values.memoryUsed;
   state._memoryMax = values.memoryMax;
@@ -524,10 +630,14 @@ function initCharts() {
   state.charts.memory = echarts.init(document.getElementById("memoryChart"));
   state.charts.online = echarts.init(document.getElementById("onlineChart"));
   state.charts.rpcRank = echarts.init(document.getElementById("rpcRankChart"));
+  state.charts.memoryUsageTrend = echarts.init(document.getElementById("memoryUsageTrendChart"));
+  state.charts.countryDist = echarts.init(document.getElementById("countryDistChart"));
+  state.charts.modeDist = echarts.init(document.getElementById("modeDistChart"));
+  state.charts.stubTop = echarts.init(document.getElementById("stubTopChart"));
 }
 
 function refreshCharts() {
-  if (!state.charts.request || !state.charts.memory || !state.charts.online) {
+  if (!state.charts.request || !state.charts.memory || !state.charts.online || !state.charts.memoryUsageTrend) {
     return;
   }
 
@@ -538,7 +648,7 @@ function refreshCharts() {
     series: [
       {
         type: "line",
-        name: "总请求数",
+        name: "每分钟请求数",
         smooth: true,
         data: state.history.totalRequests,
       },
@@ -582,6 +692,21 @@ function refreshCharts() {
       },
     ],
   });
+
+  state.charts.memoryUsageTrend.setOption({
+    tooltip: { trigger: "axis" },
+    xAxis: { type: "category", data: state.history.labels },
+    yAxis: { type: "value", min: 0, max: 100 },
+    series: [
+      {
+        type: "line",
+        name: "内存使用率",
+        areaStyle: {},
+        smooth: true,
+        data: state.history.memoryUsagePercent,
+      },
+    ],
+  });
 }
 
 function resizeCharts() {
@@ -596,6 +721,18 @@ function resizeCharts() {
   }
   if (state.charts.rpcRank) {
     state.charts.rpcRank.resize();
+  }
+  if (state.charts.memoryUsageTrend) {
+    state.charts.memoryUsageTrend.resize();
+  }
+  if (state.charts.countryDist) {
+    state.charts.countryDist.resize();
+  }
+  if (state.charts.modeDist) {
+    state.charts.modeDist.resize();
+  }
+  if (state.charts.stubTop) {
+    state.charts.stubTop.resize();
   }
 }
 
@@ -650,6 +787,32 @@ function setSettingsMessage(message) {
 
 function pad2(v) {
   return String(v).padStart(2, "0");
+}
+
+function pad3(v) {
+  return String(v).padStart(3, "0");
+}
+
+function formatDateTime(ms) {
+  const value = Number(ms || 0);
+  if (!value) {
+    return "-";
+  }
+  const d = new Date(value);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())},${pad3(d.getMilliseconds())}`;
+}
+
+function formatDuration(ms) {
+  const total = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return `${days}天${hours}小时${minutes}分`;
+}
+
+function formatBytesToMB(bytes) {
+  const value = Number(bytes || 0) / (1024 * 1024);
+  return `${value.toFixed(2)} MB`;
 }
 
 function escapeHtml(raw) {

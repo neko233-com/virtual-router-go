@@ -3,6 +3,8 @@ package VirtualRouterServer
 import (
 	"errors"
 	"log/slog"
+	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -16,6 +18,17 @@ const sessionTimeout = 30 * time.Second
 type RouterSessionManager struct {
 	mu       sync.RWMutex
 	sessions map[string]*RouterSession
+}
+
+type RouterSessionSnapshot struct {
+	RouterId        string
+	HostForRpc      string
+	PortForRpc      int
+	LastHeartbeatMs int64
+	RemoteAddr      string
+	RemoteIP        string
+	RemotePort      int
+	StubCount       int
 }
 
 func NewRouterSessionManager() *RouterSessionManager {
@@ -123,6 +136,34 @@ func (m *RouterSessionManager) GetAllRouteNodeList() []core.RouteNode {
 			RouterId:   s.RouterId,
 			HostForRpc: s.RpcServerInfo.Host,
 			PortForRpc: s.RpcServerInfo.Port,
+		})
+	}
+	return list
+}
+
+func (m *RouterSessionManager) GetAllSessionSnapshots() []RouterSessionSnapshot {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	list := make([]RouterSessionSnapshot, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		remoteAddr := s.RemoteAddrStr()
+		remoteIP := ""
+		remotePort := 0
+		if host, portStr, err := net.SplitHostPort(remoteAddr); err == nil {
+			remoteIP = host
+			if parsed, convErr := strconv.Atoi(portStr); convErr == nil {
+				remotePort = parsed
+			}
+		}
+		list = append(list, RouterSessionSnapshot{
+			RouterId:        s.RouterId,
+			HostForRpc:      s.RpcServerInfo.Host,
+			PortForRpc:      s.RpcServerInfo.Port,
+			LastHeartbeatMs: s.LastHeartbeatMs(),
+			RemoteAddr:      remoteAddr,
+			RemoteIP:        remoteIP,
+			RemotePort:      remotePort,
+			StubCount:       len(s.RpcServerInfo.Stubs),
 		})
 	}
 	return list

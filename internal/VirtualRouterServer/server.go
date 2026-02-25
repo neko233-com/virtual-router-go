@@ -31,6 +31,9 @@ type Server struct {
 
 	rpcStatsMu       sync.RWMutex
 	rpcStatsByRouter map[string]*routerRPCStats
+
+	requestStatsMu sync.Mutex
+	requestHits    []int64
 }
 
 type routerRPCStats struct {
@@ -55,6 +58,7 @@ func NewServer(cfg *config.RouterServerConfig) *Server {
 		startTime:        time.Now(),
 		shutdownCh:       make(chan struct{}),
 		rpcStatsByRouter: make(map[string]*routerRPCStats),
+		requestHits:      make([]int64, 0, 256),
 	}
 }
 
@@ -120,6 +124,7 @@ func (s *Server) handleConn(conn net.Conn) {
 			return
 		}
 		s.totalRequests.Add(1)
+		s.recordRequestHit()
 		s.totalBytes.Add(uint64(len(payload)))
 
 		msg, err := core.DecodeRouteMessagePayload(payload)
@@ -342,6 +347,22 @@ func pruneLastMinute(list []int64, nowMs int64) []int64 {
 		return list[:0]
 	}
 	return list[idx:]
+}
+
+func (s *Server) recordRequestHit() {
+	now := time.Now().UnixMilli()
+	s.requestStatsMu.Lock()
+	defer s.requestStatsMu.Unlock()
+	s.requestHits = append(s.requestHits, now)
+	s.requestHits = pruneLastMinute(s.requestHits, now)
+}
+
+func (s *Server) RequestsPerMinute() int {
+	now := time.Now().UnixMilli()
+	s.requestStatsMu.Lock()
+	defer s.requestStatsMu.Unlock()
+	s.requestHits = pruneLastMinute(s.requestHits, now)
+	return len(s.requestHits)
 }
 
 var rpcUidRegex = regexp.MustCompile(`"rpcUid"\s*:\s*"([^"]+)"`)

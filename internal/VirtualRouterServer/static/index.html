@@ -20,6 +20,7 @@
       <nav class="tabs" id="tabs">
         <button class="tab active" data-tab="home">首页</button>
         <button class="tab" data-tab="rpc">RPC节点列表</button>
+        <button class="tab" data-tab="rpc-traffic">RPC 流量管理</button>
         <button class="tab" data-tab="logs">日志</button>
         <button class="tab" data-tab="settings">系统设置</button>
       </nav>
@@ -31,7 +32,7 @@
         <div class="stats" id="stats"></div>
         <div class="chart-grid">
           <div class="card chart-card">
-            <h2>请求趋势</h2>
+            <h2>每分钟请求趋势（RPM）</h2>
             <div id="requestChart" class="chart"></div>
           </div>
           <div class="card chart-card">
@@ -43,8 +44,20 @@
             <div id="onlineChart" class="chart"></div>
           </div>
           <div class="card chart-card">
-            <h2>RPC 频率排行榜</h2>
-            <div id="rpcRankChart" class="chart"></div>
+            <h2>内存使用率趋势</h2>
+            <div id="memoryUsageTrendChart" class="chart"></div>
+          </div>
+          <div class="card chart-card">
+            <h2>节点国家分布</h2>
+            <div id="countryDistChart" class="chart"></div>
+          </div>
+          <div class="card chart-card">
+            <h2>RPC 模式分布</h2>
+            <div id="modeDistChart" class="chart"></div>
+          </div>
+          <div class="card chart-card">
+            <h2>节点 Stub 数 Top10</h2>
+            <div id="stubTopChart" class="chart"></div>
           </div>
         </div>
       </section>
@@ -62,8 +75,14 @@
             <thead>
               <tr>
                 <th>RouteId</th>
+                <th>上次心跳</th>
+                <th>来源 IP:Port</th>
+                <th>国家/地区</th>
+                <th>归属地</th>
+                <th>运营商/组织</th>
                 <th>模式</th>
-                <th>地址</th>
+                <th>RPC 注册地址</th>
+                <th>Stub 数</th>
                 <th>状态</th>
               </tr>
             </thead>
@@ -71,7 +90,27 @@
           </table>
         </div>
         <div class="card">
-          <h2>RPC 频率排行榜</h2>
+          <h2>RPC 调试</h2>
+          <p class="subtle">调试发送已改为独立窗口，避免和节点列表混在一起。</p>
+          <button id="openRpcDebugBtn" disabled>打开 RPC 调试窗口</button>
+        </div>
+      </section>
+
+      <section class="panel" id="tab-rpc-traffic">
+        <h1>RPC 流量管理</h1>
+        <div class="card">
+          <div class="row">
+            <label for="rpcTrafficKeyword">搜索 routerId</label>
+            <input id="rpcTrafficKeyword" type="text" placeholder="按 routerId 查询排行" />
+            <button id="searchRpcTrafficBtn" disabled>查询</button>
+          </div>
+        </div>
+        <div class="card chart-card">
+          <h2>RPC 频率排行榜（每分钟）</h2>
+          <div id="rpcRankChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <h2>详细排行</h2>
           <table>
             <thead>
               <tr>
@@ -85,33 +124,6 @@
             </thead>
             <tbody id="rpcRankBody"></tbody>
           </table>
-        </div>
-        <div class="card">
-          <h2>RPC 调试发送</h2>
-          <div class="row rpc-row">
-            <label for="targetRouteId">目标 RouteId</label>
-            <input id="targetRouteId" type="text" placeholder="例如: client-1" />
-
-            <label for="packetId">PacketId</label>
-            <input id="packetId" type="number" min="1" placeholder="例如: 1001" />
-
-            <button id="loadStubsBtn" disabled>加载方法</button>
-          </div>
-          <div class="row rpc-row">
-            <label for="stubSelect">可用方法</label>
-            <select id="stubSelect" disabled>
-              <option value="">请先加载方法</option>
-            </select>
-          </div>
-          <div class="row rpc-row">
-            <label for="paramText">参数(字符串)</label>
-            <textarea id="paramText" rows="5" placeholder="可直接填写 JSON 字符串，作为方法参数 string 传递"></textarea>
-          </div>
-          <div class="row rpc-row">
-            <button id="sendRpcBtn" disabled>发送 RPC</button>
-            <span id="rpcMsg" class="msg"></span>
-          </div>
-          <pre id="rpcResult" class="result">暂无结果</pre>
         </div>
       </section>
 
@@ -166,6 +178,40 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <div id="rpcDebugModal" class="modal hidden">
+    <div class="modal-backdrop" id="rpcDebugBackdrop"></div>
+    <div class="modal-panel">
+      <div class="modal-header">
+        <h2>RPC 调试发送</h2>
+        <button id="closeRpcDebugBtn" class="danger">关闭</button>
+      </div>
+      <div class="row rpc-row">
+        <label for="targetRouteId">目标 RouteId</label>
+        <input id="targetRouteId" type="text" placeholder="例如: client-1" />
+
+        <label for="packetId">PacketId</label>
+        <input id="packetId" type="number" min="1" placeholder="例如: 1001" />
+
+        <button id="loadStubsBtn" disabled>加载方法</button>
+      </div>
+      <div class="row rpc-row">
+        <label for="stubSelect">可用方法</label>
+        <select id="stubSelect" disabled>
+          <option value="">请先加载方法</option>
+        </select>
+      </div>
+      <div class="row rpc-row">
+        <label for="paramText">参数(字符串)</label>
+        <textarea id="paramText" rows="5" placeholder="可直接填写 JSON 字符串，作为方法参数 string 传递"></textarea>
+      </div>
+      <div class="row rpc-row">
+        <button id="sendRpcBtn" disabled>发送 RPC</button>
+        <span id="rpcMsg" class="msg"></span>
+      </div>
+      <pre id="rpcResult" class="result">暂无结果</pre>
+    </div>
   </div>
 
   <script src="/app.js"></script>
