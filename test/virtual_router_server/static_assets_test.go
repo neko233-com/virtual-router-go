@@ -1,4 +1,4 @@
-package VirtualRouterServer
+package virtual_router_server_test
 
 import (
 	"io"
@@ -6,10 +6,12 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
 )
 
 func TestMonitorStaticHandler_ServesIndexAndAppJS(t *testing.T) {
-	h := monitorStaticHandler()
+	h := server.MonitorStaticHandlerForTest()
 
 	indexReq := httptest.NewRequest(http.MethodGet, "/", nil)
 	indexResp := httptest.NewRecorder()
@@ -21,12 +23,12 @@ func TestMonitorStaticHandler_ServesIndexAndAppJS(t *testing.T) {
 		t.Fatalf("expected redirect to /login.html, got %q", loc)
 	}
 
-	token, err := GenerateToken("admin")
+	token, err := server.GenerateToken("admin")
 	if err != nil {
 		t.Fatalf("generate token error: %v", err)
 	}
 	authReq := httptest.NewRequest(http.MethodGet, "/", nil)
-	authReq.AddCookie(&http.Cookie{Name: authCookieName, Value: token})
+	authReq.AddCookie(&http.Cookie{Name: server.AuthCookieNameForTest(), Value: token})
 	authResp := httptest.NewRecorder()
 	h.ServeHTTP(authResp, authReq)
 	if authResp.Code != http.StatusOK {

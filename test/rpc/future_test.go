@@ -1,10 +1,14 @@
-package rpc
+package rpc_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
+)
 
 func TestFutureManagerSuccess(t *testing.T) {
-	fm := NewFutureManager()
-	f := NewFuture("uid-1")
+	fm := rpc.NewFutureManager()
+	f := rpc.NewFuture("uid-1")
 	fm.Register(f)
 
 	fm.SetSuccess("uid-1", "ok")
@@ -18,8 +22,8 @@ func TestFutureManagerSuccess(t *testing.T) {
 }
 
 func TestFutureManagerError(t *testing.T) {
-	fm := NewFutureManager()
-	f := NewFuture("uid-2")
+	fm := rpc.NewFutureManager()
+	f := rpc.NewFuture("uid-2")
 	fm.Register(f)
 
 	fm.SetError("uid-2", "boom")

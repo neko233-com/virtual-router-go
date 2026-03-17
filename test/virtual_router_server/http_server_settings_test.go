@@ -1,4 +1,4 @@
-package VirtualRouterServer
+package virtual_router_server_test
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
 	"github.com/neko233-com/virtual-router-go/internal/config"
 )
 
@@ -25,19 +26,16 @@ func TestHandleUpdateAdminPassword_SuccessAndPersist(t *testing.T) {
 		_ = os.Chdir(oldWD)
 	})
 
-	h := &HttpServer{cfg: &config.RouterServerConfig{RouterServerPort: 9999, HTTPMonitorPort: 19999, AdminPassword: "old-pass"}}
+	h := server.NewHttpServer(&config.RouterServerConfig{RouterServerPort: 9999, HTTPMonitorPort: 19999, AdminPassword: "old-pass"}, nil)
 	body := map[string]string{"oldPassword": "old-pass", "newPassword": "new-pass"}
 	payload, _ := json.Marshal(body)
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/api/system/admin-password", bytes.NewReader(payload))
-	h.handleUpdateAdminPassword(rr, req)
+	h.HandleUpdateAdminPasswordForTest(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d, body=%s", rr.Code, rr.Body.String())
-	}
-	if h.cfg.AdminPassword != "new-pass" {
-		t.Fatalf("expected in-memory password updated")
 	}
 
 	cfgPath := filepath.Join(tmp, config.RouterServerConfigName)

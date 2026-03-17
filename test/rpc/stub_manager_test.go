@@ -1,14 +1,15 @@
-package rpc
+package rpc_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/neko233-com/virtual-router-go/internal/core"
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 func TestStubManagerRegisterInvoke(t *testing.T) {
-	mgr := ServerStubManagerInstance()
+	mgr := rpc.ServerStubManagerInstance()
 
 	meta := core.RpcStubMetadata{
 		PacketId:       1,

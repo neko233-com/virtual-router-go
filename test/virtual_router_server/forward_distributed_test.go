@@ -1,16 +1,17 @@
-package VirtualRouterServer
+package virtual_router_server_test
 
 import (
 	"net"
 	"sync"
 	"testing"
 
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
 	"github.com/neko233-com/virtual-router-go/internal/config"
 	"github.com/neko233-com/virtual-router-go/internal/core"
 )
 
 func TestForwardToTarget_Distributed(t *testing.T) {
-	srv := NewServer(&config.RouterServerConfig{RouterServerPort: 1, HTTPMonitorPort: 2})
+	srv := server.NewServer(&config.RouterServerConfig{RouterServerPort: 1, HTTPMonitorPort: 2})
 
 	connA, connAClient := net.Pipe()
 	connB, connBClient := net.Pipe()
@@ -19,8 +20,8 @@ func TestForwardToTarget_Distributed(t *testing.T) {
 	defer connB.Close()
 	defer connBClient.Close()
 
-	sessionA := NewRouterSession("A", connA, core.RpcServerInfo{}, &sync.Mutex{})
-	sessionB := NewRouterSession("B", connB, core.RpcServerInfo{}, &sync.Mutex{})
+	sessionA := server.NewRouterSession("A", connA, core.RpcServerInfo{}, &sync.Mutex{})
+	sessionB := server.NewRouterSession("B", connB, core.RpcServerInfo{}, &sync.Mutex{})
 
 	if _, err := srv.SessionManager().UpsertSession("A", sessionA); err != nil {
 		t.Fatalf("upsert session A error: %v", err)
@@ -50,7 +51,7 @@ func TestForwardToTarget_Distributed(t *testing.T) {
 		readCh <- payload
 	}()
 
-	go srv.forwardToTarget(msg)
+	go srv.ForwardToTargetForTest(msg)
 
 	select {
 	case payload := <-readCh:

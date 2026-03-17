@@ -1,11 +1,15 @@
-package core
+package core_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/neko233-com/virtual-router-go/internal/core"
+)
 
 func TestRouteMessageEncodeDecodeRoundtrip(t *testing.T) {
-	mt := RouteMessageTypeRpcRequest
+	mt := core.RouteMessageTypeRpcRequest
 	data := "{\"hello\":\"world\"}"
-	msg := &RouteMessage{
+	msg := &core.RouteMessage{
 		FromRouteId: "node-1",
 		ToRouteId:   "node-2",
 		MessageType: &mt,
@@ -17,7 +21,7 @@ func TestRouteMessageEncodeDecodeRoundtrip(t *testing.T) {
 		t.Fatalf("EncodePayload error: %v", err)
 	}
 
-	decoded, err := DecodeRouteMessagePayload(payload)
+	decoded, err := core.DecodeRouteMessagePayload(payload)
 	if err != nil {
 		t.Fatalf("DecodeRouteMessagePayload error: %v", err)
 	}
@@ -34,8 +38,8 @@ func TestRouteMessageEncodeDecodeRoundtrip(t *testing.T) {
 }
 
 func TestRouteMessageEncodeDecodeNullData(t *testing.T) {
-	mt := RouteMessageTypeHeartBeat
-	msg := &RouteMessage{
+	mt := core.RouteMessageTypeHeartBeat
+	msg := &core.RouteMessage{
 		FromRouteId: "node-a",
 		ToRouteId:   "",
 		MessageType: &mt,
@@ -47,7 +51,7 @@ func TestRouteMessageEncodeDecodeNullData(t *testing.T) {
 		t.Fatalf("EncodePayload error: %v", err)
 	}
 
-	decoded, err := DecodeRouteMessagePayload(payload)
+	decoded, err := core.DecodeRouteMessagePayload(payload)
 	if err != nil {
 		t.Fatalf("DecodeRouteMessagePayload error: %v", err)
 	}

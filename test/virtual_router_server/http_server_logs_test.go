@@ -1,4 +1,4 @@
-package VirtualRouterServer
+package virtual_router_server_test
 
 import (
 	"encoding/json"
@@ -7,28 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
 	"github.com/neko233-com/virtual-router-go/internal/config"
 )
 
 func TestHandleLogs_ReturnsRecentLinesByLimit(t *testing.T) {
-	globalLogs.mu.Lock()
-	backupLines := append([]string(nil), globalLogs.lines...)
-	backupCapacity := globalLogs.capacity
-	globalLogs.lines = []string{"l1", "l2", "l3"}
-	globalLogs.capacity = 10
-	globalLogs.mu.Unlock()
+	restore := server.SetProcessLogsForTest([]string{"l1", "l2", "l3"}, 10)
+	t.Cleanup(restore)
 
-	t.Cleanup(func() {
-		globalLogs.mu.Lock()
-		globalLogs.lines = backupLines
-		globalLogs.capacity = backupCapacity
-		globalLogs.mu.Unlock()
-	})
-
-	h := &HttpServer{}
+	h := server.NewHttpServer(&config.RouterServerConfig{}, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/logs?limit=2", nil)
-	h.handleLogs(rr, req)
+	h.HandleLogsForTest(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
@@ -57,28 +47,17 @@ func TestHandleLogs_ReturnsRecentLinesByLimit(t *testing.T) {
 }
 
 func TestHandleLogs_FilterByLevel(t *testing.T) {
-	globalLogs.mu.Lock()
-	backupLines := append([]string(nil), globalLogs.lines...)
-	backupCapacity := globalLogs.capacity
-	globalLogs.lines = []string{
+	restore := server.SetProcessLogsForTest([]string{
 		"2026-01-01 10:00:00 info server started",
 		"2026-01-01 10:00:01 warn rpc timeout",
 		"2026-01-01 10:00:02 error decode failed",
-	}
-	globalLogs.capacity = 10
-	globalLogs.mu.Unlock()
+	}, 10)
+	t.Cleanup(restore)
 
-	t.Cleanup(func() {
-		globalLogs.mu.Lock()
-		globalLogs.lines = backupLines
-		globalLogs.capacity = backupCapacity
-		globalLogs.mu.Unlock()
-	})
-
-	h := &HttpServer{}
+	h := server.NewHttpServer(&config.RouterServerConfig{}, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/logs?limit=10&level=error", nil)
-	h.handleLogs(rr, req)
+	h.HandleLogsForTest(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
@@ -110,24 +89,13 @@ func TestHandleLogs_FilterByLevel(t *testing.T) {
 }
 
 func TestHandleLogsExport_ReturnsTextAttachment(t *testing.T) {
-	globalLogs.mu.Lock()
-	backupLines := append([]string(nil), globalLogs.lines...)
-	backupCapacity := globalLogs.capacity
-	globalLogs.lines = []string{"line-a", "line-b"}
-	globalLogs.capacity = 10
-	globalLogs.mu.Unlock()
+	restore := server.SetProcessLogsForTest([]string{"line-a", "line-b"}, 10)
+	t.Cleanup(restore)
 
-	t.Cleanup(func() {
-		globalLogs.mu.Lock()
-		globalLogs.lines = backupLines
-		globalLogs.capacity = backupCapacity
-		globalLogs.mu.Unlock()
-	})
-
-	h := &HttpServer{}
+	h := server.NewHttpServer(&config.RouterServerConfig{}, nil)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/logs/export?limit=2", nil)
-	h.handleLogsExport(rr, req)
+	h.HandleLogsExportForTest(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
@@ -145,14 +113,14 @@ func TestHandleLogsExport_ReturnsTextAttachment(t *testing.T) {
 }
 
 func TestHandleRouterRPCRanking_ReturnsList(t *testing.T) {
-	s := NewServer(&config.RouterServerConfig{RouterServerPort: 1, HTTPMonitorPort: 2})
-	s.recordRouterRPC("router-a", "router-b")
-	s.recordRouterRPC("router-a", "router-b")
+	s := server.NewServer(&config.RouterServerConfig{RouterServerPort: 1, HTTPMonitorPort: 2})
+	s.RecordRouterRPCForTest("router-a", "router-b")
+	s.RecordRouterRPCForTest("router-a", "router-b")
 
-	h := &HttpServer{srv: s}
+	h := server.NewHttpServer(&config.RouterServerConfig{RouterServerPort: 1, HTTPMonitorPort: 2}, s)
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/rpc/router-ranking?limit=5&keyword=router", nil)
-	h.handleRouterRPCRanking(rr, req)
+	h.HandleRouterRPCRankingForTest(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", rr.Code)
@@ -177,19 +145,19 @@ func TestHandleRouterRPCRanking_ReturnsList(t *testing.T) {
 }
 
 func TestMatchLogLevel(t *testing.T) {
-	if !matchLogLevel("2026 info ready", "info") {
+	if !server.MatchLogLevelForTest("2026 info ready", "info") {
 		t.Fatalf("expected info matched")
 	}
-	if matchLogLevel("2026 warn timeout", "info") {
+	if server.MatchLogLevelForTest("2026 warn timeout", "info") {
 		t.Fatalf("warn should not match info")
 	}
-	if !matchLogLevel("2026 error failed", "error") {
+	if !server.MatchLogLevelForTest("2026 error failed", "error") {
 		t.Fatalf("error should match")
 	}
-	if !matchLogLevel("2026 fatal panic", "error") {
+	if !server.MatchLogLevelForTest("2026 fatal panic", "error") {
 		t.Fatalf("fatal should match error")
 	}
-	if !matchLogLevel("2026 warn timeout", "warn") {
+	if !server.MatchLogLevelForTest("2026 warn timeout", "warn") {
 		t.Fatalf("warn should match")
 	}
 }

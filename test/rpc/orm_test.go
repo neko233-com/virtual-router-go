@@ -1,8 +1,10 @@
-package rpc
+package rpc_test
 
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/neko233-com/virtual-router-go/internal/rpc"
 )
 
 type testUser struct {
@@ -11,25 +13,25 @@ type testUser struct {
 }
 
 func TestRegisterRpcFuncAndInvoke(t *testing.T) {
-	ServerStubManagerInstance().Reset()
+	rpc.ServerStubManagerInstance().Reset()
 
-	meta := RpcFuncMeta{
+	meta := rpc.RpcFuncMeta{
 		PacketId:    1,
 		Description: "add",
-		ParamMeta: []RpcParamMeta{
+		ParamMeta: []rpc.RpcParamMeta{
 			{Name: "a"},
 			{Name: "b"},
 		},
 	}
 
-	err := RegisterRpcFunc(meta, func(a int, b int) (int, error) {
+	err := rpc.RegisterRpcFunc(meta, func(a int, b int) (int, error) {
 		return a + b, nil
 	})
 	if err != nil {
 		t.Fatalf("RegisterRpcFunc error: %v", err)
 	}
 
-	result, err := ServerStubManagerInstance().Invoke(1, []json.RawMessage{json.RawMessage("2"), json.RawMessage("3")})
+	result, err := rpc.ServerStubManagerInstance().Invoke(1, []json.RawMessage{json.RawMessage("2"), json.RawMessage("3")})
 	if err != nil {
 		t.Fatalf("Invoke error: %v", err)
 	}
@@ -38,7 +40,7 @@ func TestRegisterRpcFuncAndInvoke(t *testing.T) {
 		t.Fatalf("unexpected result: %#v", result)
 	}
 
-	stubs := ServerStubManagerInstance().GetAllStubsMetadata()
+	stubs := rpc.ServerStubManagerInstance().GetAllStubsMetadata()
 	if len(stubs) != 1 {
 		t.Fatalf("expected 1 stub, got %d", len(stubs))
 	}
@@ -48,17 +50,17 @@ func TestRegisterRpcFuncAndInvoke(t *testing.T) {
 }
 
 func TestRegisterRpcFuncWithStructArg(t *testing.T) {
-	ServerStubManagerInstance().Reset()
+	rpc.ServerStubManagerInstance().Reset()
 
-	meta := RpcFuncMeta{PacketId: 2, Description: "echo"}
-	if err := RegisterRpcFunc(meta, func(u testUser) (string, error) {
+	meta := rpc.RpcFuncMeta{PacketId: 2, Description: "echo"}
+	if err := rpc.RegisterRpcFunc(meta, func(u testUser) (string, error) {
 		return u.Name, nil
 	}); err != nil {
 		t.Fatalf("RegisterRpcFunc error: %v", err)
 	}
 
 	payload := json.RawMessage(`{"name":"neo","age":7}`)
-	result, err := ServerStubManagerInstance().Invoke(2, []json.RawMessage{payload})
+	result, err := rpc.ServerStubManagerInstance().Invoke(2, []json.RawMessage{payload})
 	if err != nil {
 		t.Fatalf("Invoke error: %v", err)
 	}

@@ -1,19 +1,21 @@
-package VirtualRouterServer
+package virtual_router_server_test
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	server "github.com/neko233-com/virtual-router-go/internal/VirtualRouterServer"
 )
 
 func TestLogCapture_WriteAndGetRecent(t *testing.T) {
-	capture := &logCapture{capacity: 3, lines: make([]string, 0, 3)}
+	capture := server.NewLogCaptureTestHelper(3)
 
 	_, _ = capture.Write([]byte("line-a\nline-b\n"))
 	_, _ = capture.Write([]byte("line-c\nline-d\n"))
 
-	all := capture.getRecent(10)
+	all := capture.GetRecent(10)
 	if len(all) != 3 {
 		t.Fatalf("expected 3 lines, got %d", len(all))
 	}
@@ -28,7 +30,7 @@ func TestLogCapture_WriteAndGetRecent(t *testing.T) {
 		t.Fatalf("expected third line to end with line-d, got %q", all[2])
 	}
 
-	lastTwo := capture.getRecent(2)
+	lastTwo := capture.GetRecent(2)
 	if len(lastTwo) != 2 {
 		t.Fatalf("expected 2 lines, got %d", len(lastTwo))
 	}
@@ -39,12 +41,7 @@ func TestLogCapture_WriteAndGetRecent(t *testing.T) {
 
 func TestRotatingFileWriter_RotatesFiles(t *testing.T) {
 	dir := t.TempDir()
-	w, err := newRotatingFileWriter(logRotationConfig{
-		Dir:      dir,
-		BaseName: "test.log",
-		MaxBytes: 30,
-		MaxFiles: 3,
-	})
+	w, err := server.NewRotatingFileWriterForTest(dir, "test.log", 30, 3)
 	if err != nil {
 		t.Fatalf("new rotating writer error: %v", err)
 	}
