@@ -167,25 +167,33 @@ func (c *Client) readLoop() {
 		if err != nil || msg.MessageType == nil {
 			continue
 		}
-		c.handleMessage(msg)
+		if !c.handleMessage(msg) {
+			return
+		}
 	}
 }
 
-func (c *Client) handleMessage(msg *core.RouteMessage) {
+func (c *Client) handleMessage(msg *core.RouteMessage) bool {
 	switch *msg.MessageType {
 	case core.RouteMessageTypeHeartBeat:
 		c.handleRegister(msg)
+		return true
 	case core.RouteMessageTypeRemoveRouteNode:
 		c.handleRemoveOffline(msg)
+		return true
 	case core.RouteMessageTypeMessageData:
 		slog.Info("收到 message data", "data", safeData(msg))
+		return true
 	case core.RouteMessageTypeRpcRequest:
 		rpc.HandleRelayRpcRequest(msg, c)
+		return true
 	case core.RouteMessageTypeRpcResponse:
 		rpc.HandleRelayRpcResponse(msg)
+		return true
 	case core.RouteMessageTypeSystemError:
-		c.handleSystemError(msg)
+		return c.handleSystemError(msg)
 	}
+	return true
 }
 
 func (c *Client) handleRegister(msg *core.RouteMessage) {
@@ -216,16 +224,22 @@ func (c *Client) handleRemoveOffline(msg *core.RouteMessage) {
 	slog.Info("删除已离线的 Route Client", "routeIds", ids)
 }
 
-func (c *Client) handleSystemError(msg *core.RouteMessage) {
+func (c *Client) handleSystemError(msg *core.RouteMessage) bool {
 	if msg.Data == nil {
-		return
+		return true
 	}
 	errMsg := *msg.Data
 	slog.Error("收到系统错误", "errorMessage", errMsg)
-	if strings.Contains(errMsg, "RouterId") && strings.Contains(errMsg, "已经存在") {
-		slog.Error("FATAL ERROR: RouterId 冲突", "detail", errMsg, "hint", "请修改配置文件中的 routeId，然后重启程序")
-		panic(errMsg)
+	if isRouterIDConflictError(errMsg) {
+		slog.Error("RouterId 冲突，保持进程存活并继续重连", "detail", errMsg, "hint", "可能是旧连接还未过期；如果长时间持续出现，请检查是否有多个实例使用相同 routeId")
+		c.onConnectionLost("routerId conflict", errors.New(errMsg))
+		return false
 	}
+	return true
+}
+
+func isRouterIDConflictError(errMsg string) bool {
+	return strings.Contains(errMsg, "RouterId") && strings.Contains(errMsg, "已经存在")
 }
 
 func (c *Client) startBackgroundReconnect() {
