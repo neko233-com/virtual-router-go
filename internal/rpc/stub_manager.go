@@ -3,11 +3,13 @@ package rpc
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
 	"github.com/neko233-com/virtual-router-go/internal/core"
-	"strconv"
 )
 
 type RpcHandler func(args []json.RawMessage) (any, error)
@@ -31,9 +33,16 @@ func ServerStubManagerInstance() *StubManager {
 }
 
 func (m *StubManager) EnsureInitialized() {
-	if !m.initialized.Load() {
-		panic("还没有调用 StubManager.RegisterStub 初始化 rpc server method stub")
+	if err := m.CheckInitialized(); err != nil {
+		slog.Error("RPC Stub 尚未初始化", "error", err)
 	}
+}
+
+func (m *StubManager) CheckInitialized() error {
+	if !m.initialized.Load() {
+		return errors.New("还没有调用 StubManager.RegisterStub 初始化 rpc server method stub")
+	}
+	return nil
 }
 
 func (m *StubManager) RegisterStub(meta core.RpcStubMetadata, handler RpcHandler) {
@@ -76,12 +85,19 @@ func (m *StubManager) GetAllStubsMetadata() []core.RpcStubMetadata {
 	return list
 }
 
-func (m *StubManager) Invoke(packetId int, args []json.RawMessage) (any, error) {
+func (m *StubManager) Invoke(packetId int, args []json.RawMessage) (result any, err error) {
 	h, ok := m.GetHandler(packetId)
 	if !ok {
 		return nil, errors.New("方法未注册: packetId=" + intToString(packetId))
 	}
-	return h(args)
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("RPC 执行发生 panic，已恢复避免进程崩溃", "packetId", packetId, "panic", r)
+			err = fmt.Errorf("RPC 执行异常: packetId=%d panic=%v", packetId, r)
+		}
+	}()
+	result, err = h(args)
+	return result, err
 }
 
 func intToString(v int) string {

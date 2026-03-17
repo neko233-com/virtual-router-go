@@ -19,6 +19,12 @@ func WaitResultManagerInstance() *FutureManager {
 }
 
 func HandleRelayRpcRequest(msg *core.RouteMessage, client RouterClientSender) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("处理 Relay RPC 请求时发生 panic，已恢复避免进程崩溃", "panic", r, "from", msg.FromRouteId, "to", msg.ToRouteId)
+		}
+	}()
+
 	if msg.Data == nil {
 		return
 	}
@@ -31,6 +37,7 @@ func HandleRelayRpcRequest(msg *core.RouteMessage, client RouterClientSender) {
 	resp := RpcResponse{RpcUid: req.RpcUid, StartTimeMs: req.StartTimeMs, PacketId: req.PacketId}
 	result, err := ServerStubManagerInstance().Invoke(req.PacketId, rawToJsonArgs(req.MethodArgsJsonList))
 	if err != nil {
+		slog.Warn("Relay RPC 执行失败", "packetId", req.PacketId, "rpcUid", req.RpcUid, "error", err)
 		resp.ErrorFlag = true
 		resp.ErrorMsg = err.Error()
 	} else {
@@ -41,6 +48,12 @@ func HandleRelayRpcRequest(msg *core.RouteMessage, client RouterClientSender) {
 }
 
 func HandleRelayRpcResponse(msg *core.RouteMessage) {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("处理 Relay RPC 响应时发生 panic，已恢复避免进程崩溃", "panic", r, "from", msg.FromRouteId, "to", msg.ToRouteId)
+		}
+	}()
+
 	if msg.Data == nil {
 		return
 	}

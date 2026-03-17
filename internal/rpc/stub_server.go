@@ -33,6 +33,15 @@ func (s *StubServer) Start() error {
 }
 
 func (s *StubServer) handleConn(conn net.Conn) {
+	remote := ""
+	if conn != nil && conn.RemoteAddr() != nil {
+		remote = conn.RemoteAddr().String()
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("RPC StubServer 处理连接时发生 panic，已恢复避免进程崩溃", "panic", r, "remote", remote)
+		}
+	}()
 	defer conn.Close()
 	for {
 		msg, err := readRpcFrame(conn)
@@ -50,6 +59,7 @@ func (s *StubServer) handleConn(conn net.Conn) {
 
 		result, err := ServerStubManagerInstance().Invoke(req.PacketId, rawToJsonArgs(req.MethodArgsJsonList))
 		if err != nil {
+			slog.Warn("Direct RPC 执行失败", "packetId", req.PacketId, "rpcUid", req.RpcUid, "error", err)
 			response.ErrorFlag = true
 			response.ErrorMsg = err.Error()
 		} else {

@@ -62,7 +62,10 @@ func (c *Client) RouteId() string {
 }
 
 func (c *Client) Start() error {
-	rpc.ServerStubManagerInstance().EnsureInitialized()
+	if err := rpc.ServerStubManagerInstance().CheckInitialized(); err != nil {
+		slog.Error("RPC Stub 初始化检查失败，启动阶段中止", "error", err)
+		return err
+	}
 
 	if !c.needConnect.CompareAndSwap(false, true) {
 		return nil

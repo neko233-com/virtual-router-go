@@ -10,6 +10,8 @@ import (
 
 func TestStubManagerRegisterInvoke(t *testing.T) {
 	mgr := rpc.ServerStubManagerInstance()
+	mgr.Reset()
+	defer mgr.Reset()
 
 	meta := core.RpcStubMetadata{
 		PacketId:       1,
@@ -36,3 +38,30 @@ func TestStubManagerRegisterInvoke(t *testing.T) {
 		t.Fatalf("unexpected result: %v", out)
 	}
 }
+
+func TestStubManagerInvoke_PanicHandlerShouldReturnError(t *testing.T) {
+	mgr := rpc.ServerStubManagerInstance()
+	mgr.Reset()
+	defer mgr.Reset()
+
+	meta := core.RpcStubMetadata{PacketId: 2, Description: "panic", ClassName: "Test", MethodName: "Panic"}
+	mgr.RegisterStub(meta, func(args []json.RawMessage) (any, error) {
+		panic("boom")
+	})
+
+	_, err := mgr.Invoke(2, nil)
+	if err == nil {
+		t.Fatal("expected panic converted to error, got nil")
+	}
+}
+
+func TestStubManagerCheckInitialized_ReturnsError(t *testing.T) {
+	mgr := rpc.ServerStubManagerInstance()
+	mgr.Reset()
+	defer mgr.Reset()
+
+	if err := mgr.CheckInitialized(); err == nil {
+		t.Fatal("expected initialization error when no stubs registered")
+	}
+}
+

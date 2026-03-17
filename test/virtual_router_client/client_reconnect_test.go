@@ -26,7 +26,10 @@ func waitUntil(timeout time.Duration, check func() bool) bool {
 }
 
 func TestClient_冲突后不崩溃且可自动重连(t *testing.T) {
-	// 1) 注册最小 RPC Stub，避免 Start() 时 EnsureInitialized 触发 panic。
+	clientpkg.ResetRouteTableForTest()
+	t.Cleanup(clientpkg.ResetRouteTableForTest)
+
+	// 1) 注册最小 RPC Stub，避免 Start() 时因未初始化而返回错误。
 	rpc.ServerStubManagerInstance().Reset()
 	defer rpc.ServerStubManagerInstance().Reset()
 	if err := rpc.RegisterRpcFunc(rpc.RpcFuncMeta{PacketId: 900001, Description: "ut-ping"}, func() (string, error) {
